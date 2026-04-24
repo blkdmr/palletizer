@@ -1,7 +1,6 @@
 FROM python:3.13-slim
 
-# Install MiniZinc with Gecode bundled
-RUN apt-get update && apt-get install -y wget libgomp1 libgl1 libgl1-mesa-glx && \
+RUN apt-get update && apt-get install -y wget libgomp1 libgl1 libglx0 && \
     wget -q https://github.com/MiniZinc/MiniZincIDE/releases/download/2.8.5/MiniZincIDE-2.8.5-bundle-linux-x86_64.tgz && \
     tar -xzf MiniZincIDE-2.8.5-bundle-linux-x86_64.tgz && \
     mv MiniZincIDE-2.8.5-bundle-linux-x86_64 /opt/minizinc && \
