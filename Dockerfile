@@ -8,8 +8,6 @@ RUN apt-get update && apt-get install -y wget libgomp1 libgl1 && \
     rm MiniZincIDE-2.8.5-bundle-linux-x86_64.tgz && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN apt-get install -y wget libgomp1 libgl1 libgl1-mesa-glx
-
 ENV PATH="/opt/minizinc/bin:$PATH"
 ENV MZN_STDLIB_DIR="/opt/minizinc/share/minizinc"
 
