@@ -1,14 +1,16 @@
+FROM minizinc/minizinc:latest AS minizinc
+
 FROM python:3.13-slim
 
-RUN apt-get update && apt-get install -y wget libgomp1 && \
-    wget -q https://github.com/MiniZinc/MiniZinc/releases/download/2.8.5/MiniZinc-2.8.5-linux-x86_64.tar.gz && \
-    tar -xzf MiniZinc-2.8.5-linux-x86_64.tar.gz && \
-    mv MiniZinc-2.8.5-linux-x86_64 /opt/minizinc && \
-    rm MiniZinc-2.8.5-linux-x86_64.tar.gz && \
+# Copy MiniZinc + Gecode binaries from the official image
+COPY --from=minizinc /usr/local/bin/minizinc /usr/local/bin/minizinc
+COPY --from=minizinc /usr/local/bin/fzn-gecode /usr/local/bin/fzn-gecode
+COPY --from=minizinc /usr/local/share/minizinc /usr/local/share/minizinc
+
+RUN apt-get update && apt-get install -y libgomp1 && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-ENV PATH="/opt/minizinc/bin:$PATH"
-ENV MZN_STDLIB_DIR="/opt/minizinc/share/minizinc"
+ENV MZN_STDLIB_DIR="/usr/local/share/minizinc"
 
 WORKDIR /app
 COPY requirements.txt .
