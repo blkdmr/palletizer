@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pallet Schedule — Playback</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:      #08090d;
+    --surface: #0e1018;
+    --card:    #12151f;
+    --border:  #1c2030;
+    --amber:   #f5c842;
+    --amber2:  #c99f1f;
+    --blue:    #3d8fff;
+    --green:   #2ee89a;
+    --red:     #ff4d5e;
+    --text:    #dde4f0;
+    --muted:   #49536e;
+    --dim:     #1e2336;
+    --glow:    rgba(245,200,66,0.18);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Subtle grid texture */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,.012) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.012) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Top bar ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 0 24px;
+    height: 52px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+    position: relative;
+    z-index: 10;
+  }
+
+  .back-btn {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--muted);
+    font-size: .7rem;
+    letter-spacing: .06em;
+    text-decoration: none;
+    text-transform: uppercase;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 10px;
+    transition: color .15s, border-color .15s;
+  }
+  .back-btn:hover { color: var(--amber); border-color: var(--amber); }
+
+  .topbar-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.3rem;
+    letter-spacing: .14em;
+    color: var(--text);
+  }
+  .topbar-title span { color: var(--amber); }
+
+  .topbar-meta {
+    margin-left: auto;
+    display: flex;
+    gap: 20px;
+    align-items: center;
+  }
+  .meta-chip {
+    font-size: .62rem;
+    color: var(--muted);
+    letter-spacing: .06em;
+  }
+  .meta-chip strong { color: var(--amber); font-weight: 400; }
+
+  /* ── Layout ── */
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── Pallet stage ── */
+  .stage {
+    position: relative;
+    overflow: hidden;
+    background: var(--bg);
+    cursor: grab;
+  }
+  .stage:active { cursor: grabbing; }
+
+  #pallet-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    image-rendering: pixelated;
+  }
+
+  /* Zoom controls floating on stage */
+  .stage-controls {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(14,16,24,.85);
+    border: 1px solid var(--border);
+    border-radius: 30px;
+    padding: 5px 12px;
+    backdrop-filter: blur(8px);
+  }
+  .sc-btn {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: .9rem;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 3px;
+    transition: color .12s;
+    font-family: 'DM Mono', monospace;
+  }
+  .sc-btn:hover { color: var(--amber); }
+  .sc-zoom-label {
+    font-size: .65rem;
+    color: var(--muted);
+    min-width: 36px;
+    text-align: center;
+  }
+  .sc-divider { width: 1px; height: 14px; background: var(--border); margin: 0 2px; }
+
+  /* ── Right panel ── */
+  .right-panel {
+    border-left: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .panel-section {
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .panel-label {
+    font-size: .58rem;
+    letter-spacing: .14em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  /* Step info card */
+  .step-display {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .step-big-num {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 3.2rem;
+    line-height: 1;
+    color: var(--amber);
+    letter-spacing: .04em;
+  }
+  .step-big-num span {
+    font-size: 1.2rem;
+    color: var(--muted);
+  }
+
+  .step-group-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    font-size: .7rem;
+    color: var(--text);
+    width: fit-content;
+  }
+  .step-group-swatch {
+    width: 8px; height: 8px; border-radius: 2px;
+  }
+
+  .step-packs {
+    font-size: .65rem;
+    color: var(--muted);
+    line-height: 1.6;
+    word-break: break-all;
+  }
+  .step-packs strong { color: var(--text); }
+
+  .plate-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: .65rem;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    width: fit-content;
+    margin-top: 2px;
+  }
+  .plate-badge.left  { background: rgba(61,143,255,.1);  color: var(--blue);  border: 1px solid rgba(61,143,255,.25); }
+  .plate-badge.right { background: rgba(46,232,154,.1);  color: var(--green); border: 1px solid rgba(46,232,154,.25); }
+
+  /* Group log */
+  .group-log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 10px;
+  }
+  .group-log::-webkit-scrollbar { width: 3px; }
+  .group-log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .log-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 4px;
+    transition: background .1s;
+    cursor: pointer;
+  }
+  .log-row:hover { background: var(--dim); }
+  .log-row.log-done    { opacity: .35; }
+  .log-row.log-current {
+    background: rgba(245,200,66,.06);
+    border: 1px solid rgba(245,200,66,.2);
+  }
+  .log-row.log-future  { opacity: .5; }
+
+  .log-step-n {
+    font-size: .58rem;
+    color: var(--muted);
+    width: 18px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .log-row.log-current .log-step-n { color: var(--amber); }
+
+  .log-swatch { width: 7px; height: 7px; border-radius: 2px; flex-shrink: 0; }
+
+  .log-text { font-size: .65rem; color: var(--text); flex: 1; }
+  .log-plate { font-size: .55rem; color: var(--muted); }
+
+  /* ── Bottom controls ── */
+  .controls-bar {
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    padding: 14px 24px;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* Timeline scrubber */
+  .timeline {
+    position: relative;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .timeline-label {
+    font-size: .58rem;
+    color: var(--muted);
+    letter-spacing: .06em;
+    width: 42px;
+    flex-shrink: 0;
+  }
+  .scrubber-wrap {
+    flex: 1;
+    position: relative;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+  }
+  .scrubber-track {
+    width: 100%;
+    height: 4px;
+    background: var(--dim);
+    border-radius: 4px;
+    position: relative;
+    overflow: visible;
+  }
+  .scrubber-fill {
+    height: 100%;
+    background: var(--amber);
+    border-radius: 4px;
+    transition: width .15s;
+    position: relative;
+  }
+  .scrubber-fill::after {
+    content: '';
+    position: absolute;
+    right: -6px; top: 50%;
+    transform: translateY(-50%);
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--amber);
+    box-shadow: 0 0 0 3px rgba(245,200,66,.2);
+    transition: box-shadow .15s;
+  }
+  .scrubber-wrap:hover .scrubber-fill::after {
+    box-shadow: 0 0 0 6px rgba(245,200,66,.2);
+  }
+
+  /* Step tick marks */
+  .scrubber-ticks {
+    position: absolute;
+    top: 18px;
+    left: 0; right: 0;
+    display: flex;
+    justify-content: space-between;
+    pointer-events: none;
+  }
+  .scrubber-ticks span {
+    font-size: .48rem;
+    color: var(--muted);
+  }
+
+  /* Playback row */
+  .playback-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .pb-btn {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--muted);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color .12s, color .12s, background .12s;
+    font-family: 'DM Mono', monospace;
+    font-size: .75rem;
+  }
+  .pb-btn:hover:not(:disabled) { border-color: var(--amber); color: var(--amber); }
+  .pb-btn:disabled { opacity: .25; cursor: not-allowed; }
+  .pb-btn.sm { width: 30px; height: 30px; }
+  .pb-btn.md { width: 34px; height: 34px; }
+
+  .play-btn {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: var(--amber);
+    border: none;
+    color: var(--bg);
+    font-size: 1rem;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .12s, box-shadow .12s, transform .08s;
+    box-shadow: 0 0 0 0 var(--glow);
+  }
+  .play-btn:hover {
+    background: #ffd84a;
+    box-shadow: 0 0 18px 4px var(--glow);
+  }
+  .play-btn:active { transform: scale(.94); }
+  .play-btn.playing {
+    animation: glow-pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes glow-pulse {
+    0%, 100% { box-shadow: 0 0 8px 2px var(--glow); }
+    50%       { box-shadow: 0 0 24px 8px var(--glow); }
+  }
+
+  .speed-btns {
+    display: flex;
+    gap: 3px;
+    margin-left: auto;
+  }
+  .speed-btn {
+    padding: 4px 9px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: .6rem;
+    cursor: pointer;
+    transition: all .12s;
+    letter-spacing: .04em;
+  }
+  .speed-btn.active { background: var(--dim); border-color: var(--amber); color: var(--amber); }
+  .speed-btn:hover:not(.active) { border-color: var(--muted); color: var(--text); }
+
+  /* Loading overlay */
+  #loading {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 16px; z-index: 100;
+    transition: opacity .4s;
+  }
+  #loading.hidden { opacity: 0; pointer-events: none; }
+  .loading-logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2.5rem;
+    letter-spacing: .15em;
+    color: var(--text);
+  }
+  .loading-logo span { color: var(--amber); }
+  .loading-msg { font-size: .7rem; color: var(--muted); letter-spacing: .08em; }
+  .loading-bar-wrap {
+    width: 200px; height: 3px;
+    background: var(--dim); border-radius: 3px; overflow: hidden;
+  }
+  .loading-bar {
+    height: 100%; background: var(--amber); border-radius: 3px;
+    animation: load-sweep 1.4s ease-in-out infinite;
+  }
+  @keyframes load-sweep {
+    0%   { width: 0%;   margin-left: 0; }
+    50%  { width: 60%;  margin-left: 20%; }
+    100% { width: 0%;   margin-left: 100%; }
+  }
+
+  /* Error state */
+  #error-state {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: none; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 12px; z-index: 100;
+  }
+  .err-icon { font-size: 2rem; }
+  .err-msg { font-size: .8rem; color: var(--red); }
+  .err-sub  { font-size: .7rem; color: var(--muted); }
+  .err-back {
+    margin-top: 8px;
+    padding: 8px 20px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: .7rem;
+    transition: border-color .15s, color .15s;
+  }
+  .err-back:hover { border-color: var(--amber); color: var(--amber); }
+
+  /* Pack flash animation on canvas — handled in JS via rAF */
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loading">
+  <div class="loading-logo">Pallet <span>Solver</span></div>
+  <div class="loading-bar-wrap"><div class="loading-bar"></div></div>
+  <div class="loading-msg">Loading schedule data…</div>
+</div>
+
+<!-- Error -->
+<div id="error-state">
+  <div class="err-icon">⚠</div>
+  <div class="err-msg" id="err-msg">No schedule data found.</div>
+  <div class="err-sub">Please run the solver first.</div>
+  <a class="err-back" href="/">← Back to Planner</a>
+</div>
+
+<!-- Topbar -->
+<div class="topbar">
+  <a class="back-btn" href="/">← Planner</a>
+  <div class="topbar-title">Drop <span>Schedule</span></div>
+  <div class="topbar-meta">
+    <span class="meta-chip">groups <strong id="m-groups">—</strong></span>
+    <span class="meta-chip">packs <strong id="m-packs">—</strong></span>
+    <span class="meta-chip">grid <strong id="m-grid">—</strong></span>
+  </div>
+</div>
+
+<!-- Main layout -->
+<div class="layout">
+
+  <!-- Stage -->
+  <div class="stage" id="stage">
+    <canvas id="pallet-canvas"></canvas>
+    <div class="stage-controls">
+      <button class="sc-btn" onclick="zoom(-0.15)">−</button>
+      <span class="sc-zoom-label" id="zoom-label">100%</span>
+      <button class="sc-btn" onclick="zoom(+0.15)">+</button>
+      <div class="sc-divider"></div>
+      <button class="sc-btn" onclick="fitView()">FIT</button>
+    </div>
+  </div>
+
+  <!-- Right panel -->
+  <div class="right-panel">
+
+    <div class="panel-section">
+      <div class="panel-label">Current Operation</div>
+      <div class="step-display">
+        <div class="step-big-num" id="step-big">
+          1 <span id="step-big-total">/ —</span>
+        </div>
+        <div class="step-group-badge" id="step-badge">
+          <div class="step-group-swatch" id="step-swatch"></div>
+          <span id="step-badge-label">Group —</span>
+        </div>
+        <div class="step-packs" id="step-packs">—</div>
+        <div class="plate-badge left" id="step-plate">— plate</div>
+      </div>
+    </div>
+
+    <div class="panel-label" style="padding: 14px 18px 6px">Schedule</div>
+    <div class="group-log" id="group-log"></div>
+
+  </div>
+</div>
+
+<!-- Controls bar -->
+<div class="controls-bar">
+  <div class="timeline">
+    <span class="timeline-label" id="tl-label">0 / 0</span>
+    <div class="scrubber-wrap" id="scrubber-wrap">
+      <div class="scrubber-track">
+        <div class="scrubber-fill" id="scrubber-fill" style="width:0%"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="playback-row">
+    <button class="pb-btn sm" id="btn-first" onclick="seek(0)" title="First">⏮</button>
+    <button class="pb-btn md" id="btn-prev"  onclick="seek(currentStep - 1)" title="Previous">◀</button>
+    <button class="play-btn" id="btn-play" onclick="togglePlay()" title="Play / Pause">▶</button>
+    <button class="pb-btn md" id="btn-next"  onclick="seek(currentStep + 1)" title="Next">▶|</button>
+    <button class="pb-btn sm" id="btn-last"  onclick="seek(totalSteps - 1)" title="Last">⏭</button>
+
+    <div class="speed-btns">
+      <button class="speed-btn" onclick="setSpeed(1500, this)">0.5×</button>
+      <button class="speed-btn active" onclick="setSpeed(700, this)">1×</button>
+      <button class="speed-btn" onclick="setSpeed(350, this)">2×</button>
+      <button class="speed-btn" onclick="setSpeed(150, this)">4×</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+//  DATA — read from sessionStorage (written by index.html)
+// ══════════════════════════════════════════════════════════
+const PALETTE = [
+  '#4a9eff','#f5c842','#3de8a0','#ff7c5c','#c084fc',
+  '#38bdf8','#fb923c','#a3e635','#f472b6','#34d399',
+  '#fbbf24','#60a5fa','#f87171','#a78bfa','#2dd4bf',
+  '#facc15','#4ade80','#fb7185','#818cf8','#e879f9',
+];
+function groupColor(i) { return PALETTE[i % PALETTE.length]; }
+
+let solverData  = null;
+let schedule    = [];
+let totalSteps  = 0;
+let currentStep = 0;
+let playTimer   = null;
+let playSpeed   = 700;
+
+// Animation
+let animT       = 0;      // 0..1 progress for pack flash
+let animGroupIdx = -1;
+let rafId       = null;
+let lastTs      = null;
+
+// Canvas state
+const canvas = document.getElementById('pallet-canvas');
+const ctx    = canvas.getContext('2d');
+let scale    = 1, panX = 0, panY = 0;
+let dragging = false, lastMX = 0, lastMY = 0;
+
+// ── Load data ─────────────────────────────────────────────
+function init() {
+  const raw = sessionStorage.getItem('pallet_solver_result');
+  if (!raw) { showError('No schedule data. Please solve first.'); return; }
+  try {
+    solverData = JSON.parse(raw);
+    schedule   = solverData.schedule;
+    totalSteps = schedule.length;
+  } catch(e) { showError('Corrupted data: ' + e.message); return; }
+
+  // Populate meta chips
+  const pi = solverData.pallet_info;
+  document.getElementById('m-groups').textContent = solverData.n_groups;
+  document.getElementById('m-packs').textContent  = pi.n_packs;
+  document.getElementById('m-grid').textContent   = `${pi.packs_along_x}×${pi.packs_along_y}`;
+  document.getElementById('step-big-total').textContent = `/ ${totalSteps}`;
+
+  buildLog();
+  resizeCanvas();
+  fitView();
+  seek(0);
+
+  // Hide loading
+  setTimeout(() => {
+    document.getElementById('loading').classList.add('hidden');
+  }, 400);
+}
+
+function showError(msg) {
+  document.getElementById('loading').classList.add('hidden');
+  const es = document.getElementById('error-state');
+  es.style.display = 'flex';
+  document.getElementById('err-msg').textContent = msg;
+}
+
+// ── Build log list ────────────────────────────────────────
+function buildLog() {
+  const log = document.getElementById('group-log');
+  log.innerHTML = '';
+  schedule.forEach((step, i) => {
+    const gIdx  = step.group_index - 1;
+    const row   = document.createElement('div');
+    row.className = 'log-row log-future';
+    row.id = `log-row-${i}`;
+    row.innerHTML = `
+      <span class="log-step-n">${i+1}</span>
+      <div class="log-swatch" style="background:${groupColor(gIdx)}"></div>
+      <span class="log-text">G${step.group_index} — [${step.packs.join(', ')}]</span>
+      <span class="log-plate">${step.open_plate[0].toUpperCase()}</span>
+    `;
+    row.addEventListener('click', () => { stopPlay(); seek(i); });
+    log.appendChild(row);
+  });
+}
+
+// ── Seek to step ─────────────────────────────────────────
+function seek(idx) {
+  idx = Math.max(0, Math.min(totalSteps - 1, idx));
+  currentStep = idx;
+
+  // Trigger flash animation
+  animT = 0;
+  lastTs = null;
+  animGroupIdx = schedule[idx].group_index - 1;
+  startRaf();
+
+  updateUI();
+  drawFrame(animT);
+}
+
+function updateUI() {
+  const step  = schedule[currentStep];
+  const gIdx  = step.group_index - 1;
+  const color = groupColor(gIdx);
+  const pct   = totalSteps > 1 ? (currentStep / (totalSteps - 1)) * 100 : 0;
+
+  // Scrubber
+  document.getElementById('scrubber-fill').style.width = pct + '%';
+  document.getElementById('tl-label').textContent = `${currentStep + 1} / ${totalSteps}`;
+
+  // Step display
+  document.getElementById('step-big').childNodes[0].textContent = `${currentStep + 1} `;
+  document.getElementById('step-swatch').style.background = color;
+  document.getElementById('step-badge-label').textContent = `Group ${step.group_index}`;
+  document.getElementById('step-packs').innerHTML = `<strong>Packs:</strong> ${step.packs.join(', ')}`;
+  const plateBadge = document.getElementById('step-plate');
+  plateBadge.textContent = `${step.open_plate} plate open`;
+  plateBadge.className = `plate-badge ${step.open_plate}`;
+
+  // Log
+  document.querySelectorAll('.log-row').forEach((row, i) => {
+    row.classList.remove('log-done', 'log-current', 'log-future');
+    if (i < currentStep)      row.classList.add('log-done');
+    else if (i === currentStep) row.classList.add('log-current');
+    else                       row.classList.add('log-future');
+  });
+  const activeRow = document.getElementById(`log-row-${currentStep}`);
+  if (activeRow) activeRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+
+  // Buttons
+  document.getElementById('btn-prev').disabled  = currentStep === 0;
+  document.getElementById('btn-first').disabled = currentStep === 0;
+  document.getElementById('btn-next').disabled  = currentStep === totalSteps - 1;
+  document.getElementById('btn-last').disabled  = currentStep === totalSteps - 1;
+
+  const playBtn = document.getElementById('btn-play');
+  playBtn.textContent = playTimer ? '⏸' : '▶';
+  playBtn.classList.toggle('playing', !!playTimer);
+}
+
+// ── Animation loop ────────────────────────────────────────
+const FLASH_DURATION = 500; // ms
+
+function startRaf() {
+  if (rafId) cancelAnimationFrame(rafId);
+  rafId = requestAnimationFrame(rafLoop);
+}
+
+function rafLoop(ts) {
+  if (!lastTs) lastTs = ts;
+  const dt = ts - lastTs;
+  lastTs   = ts;
+  animT    = Math.min(1, animT + dt / FLASH_DURATION);
+  drawFrame(animT);
+  if (animT < 1) {
+    rafId = requestAnimationFrame(rafLoop);
+  } else {
+    rafId = null;
+    animGroupIdx = -1;
+  }
+}
+
+// ── Canvas draw ───────────────────────────────────────────
+function drawFrame(t) {
+  if (!solverData) return;
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const d  = solverData, pi = d.pallet_info;
+  const pw = pi.pallet_x_size * scale, ph = pi.pallet_y_size * scale;
+
+  // Pallet background
+  ctx.fillStyle = '#141824';
+  ctx.fillRect(panX, panY, pw, ph);
+  ctx.strokeStyle = '#2a3050'; ctx.lineWidth = 2;
+  ctx.strokeRect(panX, panY, pw, ph);
+
+  const cols = pi.packs_along_x, rows = pi.packs_along_y;
+  const ew = pw / cols, eh = ph / rows;
+  const gap = Math.max(1, Math.min(2.5, ew * 0.045));
+
+  // Placed groups up to (not including) currentStep
+  const placedGroups = new Set();
+  for (let s = 0; s < currentStep; s++) {
+    placedGroups.add(d.schedule[s].group_index - 1);
+  }
+  const curGIdx = d.schedule[currentStep].group_index - 1;
+
+  // Flash easing: ease-out quad → flash in, then settle
+  const flash = t < 0.35
+    ? (t / 0.35)            // 0→1 fast rise
+    : 1 - ((t - 0.35) / 0.65) * 0.22; // slight fade to final alpha
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const packNum = r * cols + c + 1;
+      const gIdx    = d.pack_group[packNum];
+      const color   = groupColor(gIdx);
+      const x = panX + c * ew + gap, y = panY + r * eh + gap;
+      const w = ew - gap*2, h = eh - gap*2;
+
+      if (gIdx === curGIdx) {
+        // Current group — animated flash
+        const alpha = 0.6 + 0.4 * flash;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle   = color;
+        ctx.fillRect(x, y, w, h);
+
+        // Glow outline
+        ctx.globalAlpha = 0.9 * flash;
+        ctx.shadowColor  = color;
+        ctx.shadowBlur   = 10 * flash;
+        ctx.strokeStyle  = '#fff';
+        ctx.lineWidth    = 1.5;
+        ctx.strokeRect(x, y, w, h);
+        ctx.shadowBlur   = 0;
+        ctx.globalAlpha  = 1;
+
+      } else if (placedGroups.has(gIdx)) {
+        // Placed
+        ctx.globalAlpha = 0.72;
+        ctx.fillStyle   = color;
+        ctx.fillRect(x, y, w, h);
+        ctx.globalAlpha = 0.35;
+        ctx.strokeStyle = color; ctx.lineWidth = 0.7;
+        ctx.strokeRect(x, y, w, h);
+        ctx.globalAlpha = 1;
+
+      } else {
+        // Future — ghost
+        ctx.globalAlpha = 0.055;
+        ctx.fillStyle   = '#fff';
+        ctx.fillRect(x, y, w, h);
+        ctx.globalAlpha = 0.08;
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.5;
+        ctx.strokeRect(x, y, w, h);
+        ctx.globalAlpha = 1;
+      }
+
+      // Pack number label
+      if (ew > 18 && eh > 12) {
+        const isActive  = gIdx === curGIdx;
+        const isPlaced  = placedGroups.has(gIdx);
+        ctx.globalAlpha = isActive ? 0.9 : isPlaced ? 0.55 : 0.12;
+        ctx.fillStyle   = isActive ? '#000' : '#fff';
+        ctx.font        = `${Math.min(11, ew * 0.32)}px 'DM Mono', monospace`;
+        ctx.textAlign   = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(packNum, x + w/2, y + h/2);
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  // Draw gripper overlay
+  drawGripper(curGIdx, ew, eh, gap, flash);
+
+  document.getElementById('zoom-label').textContent = `${Math.round(scale * 100)}%`;
+}
+
+function drawGripper(gIdx, ew, eh, gap, flashT) {
+  if (!solverData) return;
+  const d = solverData, pi = d.pallet_info;
+  const group = d.groups[gIdx];
+  if (!group || group.length === 0) return;
+
+  const step = d.schedule[currentStep];
+  const cols = pi.packs_along_x;
+
+  const positions = group.map(p => ({
+    r: Math.floor((p - 1) / cols),
+    c: (p - 1) % cols,
+  }));
+  const minC = Math.min(...positions.map(p => p.c));
+  const maxC = Math.max(...positions.map(p => p.c));
+  const row  = positions[0].r;
+
+  const x1 = panX + minC * ew;
+  const x2 = panX + (maxC + 1) * ew;
+  const y1 = panY + row * eh;
+  const y2 = panY + (row + 1) * eh;
+  const gw = x2 - x1;
+  const pt = Math.max(3, Math.min(8, ew * 0.12)); // plate thickness
+
+  const alpha = Math.min(1, flashT * 2.5);
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Fixed top plate
+  ctx.fillStyle   = '#e2e8f0';
+  ctx.shadowColor = 'rgba(255,255,255,0.3)';
+  ctx.shadowBlur  = 4;
+  ctx.fillRect(x1 - 2, y1 - pt - 3, gw + 4, pt);
+  ctx.shadowBlur  = 0;
+
+  // Bottom plate — split to show open side
+  const openRight = step.open_plate === 'right';
+  const solidColor  = '#e2e8f0';
+  const openColor   = openRight ? 'rgba(61,143,255,.8)' : 'rgba(46,232,154,.8)';
+
+  // Solid half
+  ctx.fillStyle = solidColor;
+  if (openRight) {
+    ctx.fillRect(x1 - 2, y2 + 3, gw * 0.55, pt);
+  } else {
+    ctx.fillRect(x1 + gw * 0.45, y2 + 3, gw * 0.55 + 4, pt);
+  }
+
+  // Open half (dashed outline)
+  ctx.strokeStyle = openColor;
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 3]);
+  if (openRight) {
+    ctx.strokeRect(x1 + gw * 0.55 + 1, y2 + 3, gw * 0.45, pt);
+  } else {
+    ctx.strokeRect(x1 - 2, y2 + 3, gw * 0.45, pt);
+  }
+  ctx.setLineDash([]);
+
+  // Side rails
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x1 - 2, y1 - 3); ctx.lineTo(x1 - 2, y2 + 3);
+  ctx.moveTo(x2 + 2, y1 - 3); ctx.lineTo(x2 + 2, y2 + 3);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+// ── Playback ──────────────────────────────────────────────
+function togglePlay() {
+  if (playTimer) { stopPlay(); return; }
+  if (currentStep >= totalSteps - 1) seek(0);
+  startPlay();
+}
+
+function startPlay() {
+  const btn = document.getElementById('btn-play');
+  btn.textContent = '⏸'; btn.classList.add('playing');
+  playTimer = setInterval(() => {
+    if (currentStep >= totalSteps - 1) { stopPlay(); return; }
+    seek(currentStep + 1);
+  }, playSpeed);
+}
+
+function stopPlay() {
+  clearInterval(playTimer); playTimer = null;
+  const btn = document.getElementById('btn-play');
+  btn.textContent = '▶'; btn.classList.remove('playing');
+}
+
+function setSpeed(ms, el) {
+  playSpeed = ms;
+  document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  if (playTimer) { stopPlay(); startPlay(); }
+}
+
+// ── Zoom / Pan ────────────────────────────────────────────
+function fitView() {
+  if (!solverData) return;
+  const stage = document.getElementById('stage');
+  const W = stage.clientWidth, H = stage.clientHeight;
+  const pi = solverData.pallet_info;
+  const pad = 60;
+  scale = Math.min((W - pad*2) / pi.pallet_x_size, (H - pad*2) / pi.pallet_y_size);
+  panX  = (W - pi.pallet_x_size * scale) / 2;
+  panY  = (H - pi.pallet_y_size * scale) / 2;
+  drawFrame(animGroupIdx >= 0 ? animT : 1);
+}
+
+function zoom(delta) {
+  if (!solverData) return;
+  const stage = document.getElementById('stage');
+  const cx = stage.clientWidth/2, cy = stage.clientHeight/2;
+  const old = scale;
+  scale = Math.max(0.05, Math.min(20, scale + delta * scale));
+  panX = cx - (cx - panX) * (scale / old);
+  panY = cy - (cy - panY) * (scale / old);
+  drawFrame(animGroupIdx >= 0 ? animT : 1);
+}
+
+function resizeCanvas() {
+  const stage = document.getElementById('stage');
+  canvas.width  = stage.clientWidth;
+  canvas.height = stage.clientHeight;
+  if (solverData) fitView();
+}
+
+// Scrubber interaction
+const scrubWrap = document.getElementById('scrubber-wrap');
+let scrubbing = false;
+
+function scrubAt(e) {
+  const rect = scrubWrap.getBoundingClientRect();
+  const pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  seek(Math.round(pct * (totalSteps - 1)));
+}
+scrubWrap.addEventListener('mousedown', e => { scrubbing = true; stopPlay(); scrubAt(e); });
+document.addEventListener('mousemove',  e => { if (scrubbing) scrubAt(e); });
+document.addEventListener('mouseup',    ()  => { scrubbing = false; });
+
+// Canvas pan
+const stage = document.getElementById('stage');
+stage.addEventListener('mousedown', e => {
+  if (e.target !== canvas) return;
+  dragging = true; lastMX = e.clientX; lastMY = e.clientY;
+});
+stage.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  panX += e.clientX - lastMX; panY += e.clientY - lastMY;
+  lastMX = e.clientX; lastMY = e.clientY;
+  drawFrame(animGroupIdx >= 0 ? animT : 1);
+});
+stage.addEventListener('mouseup',    () => dragging = false);
+stage.addEventListener('mouseleave', () => dragging = false);
+
+stage.addEventListener('wheel', e => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const old = scale; const d = e.deltaY < 0 ? 1.12 : 0.88;
+  scale = Math.max(0.05, Math.min(20, scale * d));
+  panX = mx - (mx - panX) * (scale / old);
+  panY = my - (my - panY) * (scale / old);
+  drawFrame(animGroupIdx >= 0 ? animT : 1);
+}, { passive: false });
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'l') { stopPlay(); seek(currentStep + 1); }
+  if (e.key === 'ArrowLeft'  || e.key === 'h') { stopPlay(); seek(currentStep - 1); }
+  if (e.key === ' ')  { e.preventDefault(); togglePlay(); }
+  if (e.key === 'Home') seek(0);
+  if (e.key === 'End')  seek(totalSteps - 1);
+});
+
+new ResizeObserver(resizeCanvas).observe(stage);
+
+// ── Start ─────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
