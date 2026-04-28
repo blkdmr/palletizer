@@ -1,0 +1,9 @@
+__pycache__
+*.json
+*.MD
+*.pdf
+report.*
+
+!README.md
+!report.tex
+!report.pdf

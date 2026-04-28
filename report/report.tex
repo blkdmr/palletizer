@@ -1,0 +1,476 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{enumitem}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  urlcolor=blue,
+  citecolor=black
+}
+
+% MiniZinc listing style
+\definecolor{mznKw}{RGB}{0,90,160}
+\definecolor{mznCom}{RGB}{120,120,120}
+\definecolor{mznStr}{RGB}{170,55,55}
+
+\lstdefinelanguage{minizinc}{
+  morekeywords={
+    include, par, var, array, of, int, bool, set, constraint,
+    forall, exists, sum, alldifferent, solve, satisfy, minimize, maximize,
+    if, then, else, endif, in, div, mod, where, output, predicate, function
+  },
+  sensitive=true,
+  morecomment=[l]{\%},
+  morestring=[b]"
+}
+
+\lstset{
+  language=minizinc,
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{mznKw}\bfseries,
+  commentstyle=\color{mznCom}\itshape,
+  stringstyle=\color{mznStr},
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  numbersep=8pt,
+  breaklines=true,
+  showstringspaces=false,
+  frame=single,
+  framesep=4pt,
+  rulecolor=\color{gray!40},
+  captionpos=b,
+  xleftmargin=10pt
+}
+
+\title{Robot Movement Planning\\\large A Constraint Programming approach to gripper-aware depalletizing}
+\author{Alessio Russo}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+% =============================================================================
+\section{Problem statement}
+\label{sec:problem}
+
+A continuous belt produces $x \times y$ boxes (with $y$ orthogonal to the
+belt direction). A target packaging layer of $n$ boxes is given by the
+destination positions $(P_x[i], P_y[i])$ for $i \in 1,\dots,n$, so that boxes
+do not overlap and tile a rectangle.
+
+A robotic gripper of size $S$ can pick a contiguous run of boxes along the
+$x$-axis whose total physical length is at most $S + x$ (i.e. up to
+$\lfloor (S+x)/x \rfloor$ boxes), with at most $x/2$ overflow per side. The
+gripper has two parallel plates: only \emph{one} can open at any release, so
+the side that opens must face a free direction --- either the boundary or a
+position that has not been filled yet. This generates two coupled subproblems:
+
+\begin{enumerate}[label=(\alph*)]
+  \item \textbf{Grouping.} Partition the $n$ packs into contiguous,
+        same-row groups, each fitting in the gripper.
+  \item \textbf{Scheduling.} Order the groups in time and assign a plate
+        side per group so that, when released, the opening plate faces an
+        empty direction.
+\end{enumerate}
+
+We encode (a) and (b) jointly in a single MiniZinc model, solved as a
+satisfiability problem.
+
+% =============================================================================
+\section{Model}
+\label{sec:model}
+
+The MiniZinc model lives in \texttt{model.mzn}. We describe its parameters,
+decision variables, and constraints in detail.
+
+\subsection{Parameters and derived constants}
+
+\begin{lstlisting}[caption={Parameters and derived constants.}]
+par int: n_packs;
+par int: packs_x_dim;
+par int: packs_along_x;
+par int: packs_along_y;
+par int: grip_size;
+
+par int: max_pkble_packs = (grip_size + packs_x_dim) div packs_x_dim;
+par int: groups_per_row  = (packs_along_x + max_pkble_packs - 1)
+                            div max_pkble_packs;
+par int: n_groups        = packs_along_y * groups_per_row;
+\end{lstlisting}
+
+\paragraph{Inputs.} \texttt{n\_packs} is the total number of boxes on the
+pallet. \texttt{packs\_along\_x} and \texttt{packs\_along\_y} are the grid
+dimensions of the placement layer. \texttt{packs\_x\_dim} is the box side
+parallel to the gripper (so \texttt{packs\_x\_dim}~$= x$ in the natural
+orientation, or $y$ if the layer is rotated). \texttt{grip\_size} is $S$.
+
+\paragraph{Derived.}
+\begin{itemize}
+  \item \texttt{max\_pkble\_packs} $= \lfloor (S + x)/x \rfloor$ is the
+        gripper capacity in boxes, derived directly from the geometry.
+  \item \texttt{groups\_per\_row} is the minimum number of groups needed
+        to cover one row, computed by ceiling division.
+  \item \texttt{n\_groups} fixes the total number of groups. We use a
+        \emph{fixed} group cardinality to make the model fully static:
+        every group is filled, and the partition is forced to be a
+        contiguous prefix-sum sequence.
+\end{itemize}
+
+\subsection{Decision variables}
+
+\begin{lstlisting}[caption={Decision variables.}]
+array[1..n_groups] of var 1..n_packs:         group_start;
+array[1..n_groups] of var 1..max_pkble_packs: group_len;
+
+array[1..n_groups] of var 1..n_groups: drop_order;
+array[1..n_groups] of var 0..1:        plate;
+\end{lstlisting}
+
+\begin{itemize}
+  \item \texttt{group\_start[g]} -- index of the first pack of group $g$
+        in row-major order over the pallet grid.
+  \item \texttt{group\_len[g]} -- number of packs in group $g$,
+        bounded by the gripper capacity.
+  \item \texttt{drop\_order[g]} -- the temporal step (1..n\_groups) at
+        which group $g$ is dropped on the pallet.
+  \item \texttt{plate[g]} -- which plate opens when group $g$ is released
+        (0 = left plate, 1 = right plate).
+\end{itemize}
+
+\subsection{Grouping constraints}
+
+\begin{lstlisting}[caption={Contiguity and row-boundary constraints.}]
+constraint group_start[1] = 1;
+
+constraint forall(i in 1..n_groups - 1)(
+  group_start[i + 1] = group_start[i] + group_len[i]
+);
+
+constraint group_start[n_groups] + group_len[n_groups] - 1 = n_packs;
+
+constraint forall(i in 1..n_groups)(
+  (group_start[i] - 1)                div packs_along_x =
+  (group_start[i] + group_len[i] - 2) div packs_along_x
+);
+\end{lstlisting}
+
+The first three constraints together force the groups to form a contiguous
+partition of $\{1,\dots,n\}$: the first group starts at pack 1, each
+subsequent group starts where the previous one ended, and the last group
+ends at pack $n$. This makes \texttt{group\_start} a prefix-sum of
+\texttt{group\_len}, which gives the solver a tight propagation handle.
+
+The fourth constraint enforces the \emph{same-row} requirement of the
+gripper: a group must not straddle a row boundary in the row-major
+indexing. Using integer division by \texttt{packs\_along\_x}, the row index
+of the first pack must equal the row index of the last pack.
+
+\subsection{Neighbor structure (parameter, not variable)}
+
+\begin{lstlisting}[caption={Left/right neighbors as par arrays.}]
+array[1..n_groups] of par int: left_neighbor =
+  [ if (g - 1) mod groups_per_row > 0
+    then g - 1 else 0 endif
+  | g in 1..n_groups ];
+
+array[1..n_groups] of par int: right_neighbor =
+  [ if (g - 1) mod groups_per_row < groups_per_row - 1
+    then g + 1 else 0 endif
+  | g in 1..n_groups ];
+\end{lstlisting}
+
+Because groups are filled in row-major order with a fixed
+\texttt{groups\_per\_row}, the spatial adjacency between groups is
+\emph{known at compile time}: it is a function of the group index alone, not
+of \texttt{group\_start} or \texttt{group\_len}. We exploit this by declaring
+\texttt{left\_neighbor} and \texttt{right\_neighbor} as \texttt{par} (not
+\texttt{var}) arrays, computed from index arithmetic. A neighbor index of
+$0$ is the sentinel for ``no neighbor on that side'' (i.e. row boundary).
+This removes a layer of decision variables and lets the flattener fully
+unroll the scheduling constraint below.
+
+\subsection{Scheduling constraints}
+
+\begin{lstlisting}[caption={Plate-collision constraint and step permutation.}]
+constraint alldifferent(drop_order);
+
+constraint forall(g in 1..n_groups)(
+  (plate[g] = 0 /\
+    (left_neighbor[g]  = 0 \/
+     drop_order[left_neighbor[g]]  > drop_order[g]))
+  \/
+  (plate[g] = 1 /\
+    (right_neighbor[g] = 0 \/
+     drop_order[right_neighbor[g]] > drop_order[g]))
+);
+
+solve satisfy;
+\end{lstlisting}
+
+\paragraph{Permutation.} \texttt{alldifferent(drop\_order)} together with
+the domain $1..n\_groups$ forces \texttt{drop\_order} to be a permutation:
+each step $1,\dots,n\_groups$ is used exactly once.
+
+\paragraph{Plate-collision.} For each group $g$, we require that the
+\emph{opening} plate faces a free side at the moment of release. ``Free''
+means either:
+\begin{itemize}
+  \item the relevant neighbor does not exist (sentinel $0$, group is on a
+        row boundary), or
+  \item the neighbor exists but is dropped \emph{later} than $g$, so the
+        cell on that side is still empty.
+\end{itemize}
+Encoding this as a disjunction over \texttt{plate[g]} couples the
+two scheduling decisions: once \texttt{plate} is fixed for a group, the
+required temporal ordering with one specific neighbor is determined.
+
+\paragraph{Solve.} The model is a pure feasibility problem (\texttt{solve
+satisfy}); we do not optimize the schedule, since any ordering that
+respects the plate-collision constraint is a valid pick-and-place plan.
+
+% =============================================================================
+\section{Driving the model from Python}
+\label{sec:python}
+
+The Python layer is intentionally thin --- it is a wrapper around
+\texttt{minizinc-python} that handles the geometry computations the model
+deliberately leaves out, and produces visual artifacts of solutions. Three
+scripts compose the pipeline:
+
+\begin{description}
+  \item[\texttt{sample.py}] Solves a single instance and renders the
+        layout and a step-by-step drop schedule as PDFs. The Python side
+        is responsible for picking the orientation that fits more boxes
+        on the pallet (\texttt{lib/utils.py}: \texttt{gen\_pallet\_info}),
+        deriving \texttt{packs\_x\_dim} and the gripper size $S = 3x$,
+        and translating the model output (the four arrays
+        \texttt{group\_start}, \texttt{group\_len}, \texttt{drop\_order},
+        \texttt{plate}) into a high-level \emph{schedule} of drop
+        actions.
+  \item[\texttt{benchmark.py}] Runs the same model across the cartesian
+        product of five pallet presets and six pack sizes, against every
+        available solver, with a 5-minute timeout. Each run is
+        encapsulated and timing/error information is recorded in a
+        single \texttt{benchmark/results.json} file.
+  \item[\texttt{plot\_benchmark.py}] Consumes the JSON benchmark and
+        produces the comparison plots referenced in
+        Section~\ref{sec:benchmark}.
+\end{description}
+
+The renderer in \texttt{lib/visualize.py} is orientation-agnostic: it
+consumes already-rotated cell dimensions (\texttt{cell\_w}, \texttt{cell\_h})
+and the four solution arrays, and outputs both an overall pallet figure
+(colored by group) and one figure per drop step (with an arrow showing the
+opening plate side).
+
+\subsection{Worked example}
+\label{sec:example}
+
+To make the output of the model concrete, we run \texttt{sample.py} on a
+$70 \times 70$ pack and an $800 \times 1200$ pallet. The geometry helper
+chooses the rotation that maximises pack count, yielding an
+$11 \times 17$ grid (\(n = 187\) packs). With \(S = 3 \cdot 70 = 210\),
+the gripper capacity is \(\lfloor (210 + 70)/70 \rfloor = 4\) packs, and
+each row of 11 packs is split into 3 groups of sizes $3+4+4$, for a
+total of \(n\_groups = 51\).
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.55\linewidth]{images/sample_pallet.pdf}
+  \caption{Pallet layout produced by the grouping stage: 51 groups
+  tiling the $11 \times 17$ grid in row-major order, each colored
+  distinctly. Groups alternate $3$--$4$--$4$ across each row.}
+  \label{fig:sample-pallet}
+\end{figure}
+
+Figure~\ref{fig:sample-schedule} samples four steps from the 51-step
+schedule produced by the model. The opening plate is highlighted by a
+red border on the active group and a blue arrow pointing in the
+direction the plate opens; the side it points to is always empty at the
+moment of release.
+
+\begin{figure}[h]
+  \centering
+  \begin{subfigure}[t]{0.24\linewidth}
+    \includegraphics[width=\linewidth]{images/sample_step_01.pdf}
+    \caption{Step 1: \(G_{51}\), bottom-right corner.}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.24\linewidth}
+    \includegraphics[width=\linewidth]{images/sample_step_10.pdf}
+    \caption{Step 10: \(G_{38}\) opens left into a still-empty cell.}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.24\linewidth}
+    \includegraphics[width=\linewidth]{images/sample_step_25.pdf}
+    \caption{Step 25: \(G_{15}\), about halfway through.}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.24\linewidth}
+    \includegraphics[width=\linewidth]{images/sample_step_51.pdf}
+    \caption{Step 51: \(G_1\), the final drop, opens left into the
+    pallet boundary.}
+  \end{subfigure}
+  \caption{Selected drop steps from the 51-step schedule. The red
+  border marks the group being placed; the blue arrow shows the
+  opening plate side, which always faces a free cell.}
+  \label{fig:sample-schedule}
+\end{figure}
+
+The schedule starts in the bottom-right corner and works back toward
+the top-left: at step 1 the gripper drops \(G_{51}\) opening to the
+left (its left neighbor \(G_{50}\) has not yet been placed), and the
+final step places \(G_1\) opening to the left into the pallet edge
+(no left neighbor exists, so the boundary sentinel applies).
+
+% =============================================================================
+\section{Benchmarking}
+\label{sec:benchmark}
+
+\subsection{Setup}
+
+The benchmark runs the MiniZinc model on every $(\text{pallet},
+\text{pack})$ combination from the lists in \texttt{benchmark.py} (see
+Table~\ref{tab:bench-grid}), against every solver registered with the
+local MiniZinc installation, with a per-run timeout of 300 seconds.
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{lll}
+    \toprule
+    \textbf{Pallet preset} & \textbf{Dimensions (mm)} \\
+    \midrule
+    Europallet         & $1200 \times 800$  \\
+    Industrie          & $1200 \times 1000$ \\
+    US 40$\times$48    & $1219 \times 1016$ \\
+    Half-pallet        & $800  \times 600$  \\
+    Australian         & $1165 \times 1165$ \\
+    \bottomrule
+  \end{tabular}
+  \quad
+  \begin{tabular}{l}
+    \toprule
+    \textbf{Pack size (mm)} \\
+    \midrule
+    $50 \times 50$   \\
+    $70 \times 70$   \\
+    $100 \times 100$ \\
+    $120 \times 80$  \\
+    $150 \times 150$ \\
+    $200 \times 200$ \\
+    \bottomrule
+  \end{tabular}
+  \caption{Pallet presets and pack sizes used in the benchmark.}
+  \label{tab:bench-grid}
+\end{table}
+
+The gripper size is fixed at $S = 3 \cdot \texttt{packs\_x\_dim}$, the
+maximum allowed by the project specification.
+
+\subsection{Overall scaling}
+
+Figure~\ref{fig:scaling-overall} shows solve time as a function of the
+total number of packs on the pallet, on a logarithmic axis, for every
+solver across all instances. The geometric mean and min/max range per
+solver is summarised in Figure~\ref{fig:solver-summary}.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.85\linewidth]{images/scaling_overall_n_packs.pdf}
+  \caption{Solve time vs. total number of packs --- all solvers, all
+  instances. Log scale on the time axis.}
+  \label{fig:scaling-overall}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.7\linewidth]{images/solver_summary.pdf}
+  \caption{Per-solver geometric mean of solve time (bar) with min/max
+  whiskers across the full benchmark set.}
+  \label{fig:solver-summary}
+\end{figure}
+
+\subsection{Per-pallet breakdown}
+
+Splitting the data by pallet preset (Figure~\ref{fig:scaling-per-pallet})
+isolates the effect of pack count from pallet shape: for a fixed pallet,
+the curves are functions of pack count alone, while differences between
+pallets reflect the impact of \texttt{packs\_along\_x} and
+\texttt{packs\_along\_y} on the number of groups.
+
+\begin{figure}[h]
+  \centering
+  \begin{subfigure}[t]{0.48\linewidth}
+    \includegraphics[width=\linewidth]{images/scaling_europallet_n_packs.pdf}
+    \caption{Europallet}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.48\linewidth}
+    \includegraphics[width=\linewidth]{images/scaling_industrie_n_packs.pdf}
+    \caption{Industrie}
+  \end{subfigure}
+
+  \medskip
+
+  \begin{subfigure}[t]{0.48\linewidth}
+    \includegraphics[width=\linewidth]{images/scaling_us_40x48_n_packs.pdf}
+    \caption{US 40$\times$48}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.48\linewidth}
+    \includegraphics[width=\linewidth]{images/scaling_halfpallet_n_packs.pdf}
+    \caption{Half-pallet}
+  \end{subfigure}
+
+  \medskip
+
+  \begin{subfigure}[t]{0.48\linewidth}
+    \includegraphics[width=\linewidth]{images/scaling_australian_n_packs.pdf}
+    \caption{Australian}
+  \end{subfigure}
+  \caption{Solve time vs. number of packs, broken down by pallet preset.}
+  \label{fig:scaling-per-pallet}
+\end{figure}
+
+\subsection{Wall time vs.\ solve time}
+
+The gap between Python-measured wall time and solver-reported solve time
+captures MiniZinc flattening and inter-process overhead.
+Figure~\ref{fig:wall-vs-solve} plots the two against each other; points
+above the diagonal indicate runs in which the harness cost dominated the
+search itself.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.7\linewidth]{images/wall_vs_solve.pdf}
+  \caption{Wall time vs. solve time per run, log--log. The diagonal
+  represents zero overhead; all points lie above it.}
+  \label{fig:wall-vs-solve}
+\end{figure}
+
+% =============================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+The two-stage formulation --- grouping the pallet into pickable runs, then
+scheduling the drops with a plate side per group --- maps cleanly onto
+MiniZinc decision variables and yields a compact, fully feasible model. The
+key modelling choice is to fix the number of groups statically and force
+the partition into a prefix-sum shape; this lets us pre-compute the
+neighbor structure as parameters rather than variables, keeping the
+plate-collision constraint a simple disjunction over indexed lookups.
+
+The benchmark confirms that the model scales well across realistic pallet
+sizes within the 5-minute budget, and exposes the expected per-solver
+trade-offs between flattening overhead and search performance.
+
+\end{document}

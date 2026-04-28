@@ -1,2 +1,2 @@
 minizinc
-flask
+matplotlib
