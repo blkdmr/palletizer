@@ -1,19 +1,19 @@
 include "globals.mzn";
 
 %% ── Parameters ────────────────────────────────────────────────────────────────
-par int: n_packs;
-par int: packs_x_dim;
-par int: packs_along_x;
-par int: packs_along_y;
+par int: n_boxes;
+par int: boxes_x_dim;
+par int: boxes_along_x;
+par int: boxes_along_y;
 par int: grip_size;
 
-par int: max_pkble_packs  = (grip_size + packs_x_dim) div packs_x_dim;
-par int: groups_per_row   = (packs_along_x + max_pkble_packs - 1) div max_pkble_packs;
-par int: n_groups         = packs_along_y * groups_per_row;
+par int: max_pkble_boxes  = (grip_size + boxes_x_dim) div boxes_x_dim;
+par int: groups_per_row   = (boxes_along_x + max_pkble_boxes - 1) div max_pkble_boxes;
+par int: n_groups         = boxes_along_y * groups_per_row;
 
 %% ── Part 1: grouping ──────────────────────────────────────────────────────────
-array[1..n_groups] of var 1..n_packs:         group_start;
-array[1..n_groups] of var 1..max_pkble_packs: group_len;
+array[1..n_groups] of var 1..n_boxes:         group_start;
+array[1..n_groups] of var 1..max_pkble_boxes: group_len;
 
 % First group starts at pack 1
 constraint group_start[1] = 1;
@@ -23,13 +23,13 @@ constraint forall(i in 1..n_groups - 1)(
   group_start[i + 1] = group_start[i] + group_len[i]
 );
 
-% All packs covered
-constraint group_start[n_groups] + group_len[n_groups] - 1 = n_packs;
+% All boxes covered
+constraint group_start[n_groups] + group_len[n_groups] - 1 = n_boxes;
 
-% x-boundary: all packs in a group must lie in the same x-row
+% x-boundary: all boxes in a group must lie in the same x-row
 constraint forall(i in 1..n_groups)(
-  (group_start[i] - 1)                    div packs_along_x =
-  (group_start[i] + group_len[i] - 2)     div packs_along_x
+  (group_start[i] - 1)                    div boxes_along_x =
+  (group_start[i] + group_len[i] - 2)     div boxes_along_x
 );
 
 %% ── Part 2: neighbor computation (pure par, from group index structure) ───────

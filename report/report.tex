@@ -58,156 +58,335 @@
 
 \title{Robot Movement Planning\\\large A Constraint Programming approach to gripper-aware depalletizing}
 \author{Alessio Russo}
-\date{\today}
+\date{}
 
 \begin{document}
 \maketitle
 
 % =============================================================================
-\section{Problem statement}
+\section{Problem Statement}
 \label{sec:problem}
 
-A continuous belt produces $x \times y$ boxes (with $y$ orthogonal to the
-belt direction). A target packaging layer of $n$ boxes is given by the
-destination positions $(P_x[i], P_y[i])$ for $i \in 1,\dots,n$, so that boxes
-do not overlap and tile a rectangle.
+We consider a rectangular layer of boxes arranged on a discrete grid. Each box
+has dimensions \(x \times y\), where the \(x\)-axis is aligned with the belt
+direction and the \(y\)-axis is orthogonal to it. The target packaging layer
+contains \(n\) boxes, whose destination positions are denoted by
+\((P_x[i], P_y[i])\), for \(i = 1,\dots,n\). These positions are assumed to be
+non-overlapping and to tile a rectangular grid.
 
-A robotic gripper of size $S$ can pick a contiguous run of boxes along the
-$x$-axis whose total physical length is at most $S + x$ (i.e. up to
-$\lfloor (S+x)/x \rfloor$ boxes), with at most $x/2$ overflow per side. The
-gripper has two parallel plates: only \emph{one} can open at any release, so
-the side that opens must face a free direction --- either the boundary or a
-position that has not been filled yet. This generates two coupled subproblems:
+A robotic gripper with two parallel plates, each of size \(S\), can pick a
+contiguous sequence of boxes along the \(x\)-axis. The total physical length of
+the sequence must be at most \(S + x\), which corresponds to a maximum number
+of boxes equal to
+\[
+    \left\lfloor \frac{S+x}{x} \right\rfloor .
+\]
+This formulation accounts for a maximum admissible overflow of \(x/2\) on each
+side of the gripper. Figure~\ref{fig:pick-example} shows an example of the
+picking operation.
 
-\begin{enumerate}[label=(\alph*)]
-  \item \textbf{Grouping.} Partition the $n$ packs into contiguous,
-        same-row groups, each fitting in the gripper.
-  \item \textbf{Scheduling.} Order the groups in time and assign a plate
-        side per group so that, when released, the opening plate faces an
-        empty direction.
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.75\textwidth]{images/pick.png}
+    \caption{Example of a picking operation from the input stream.}
+    \label{fig:pick-example}
+\end{figure}
+
+At each release operation, only one gripper plate can open. Therefore, the
+opening side must face a free direction, either the external boundary of the
+layer or a grid position that has not yet been filled. Figure~\ref{fig:drop-example}
+shows an example of this release constraint. This constraint couples the
+geometric construction of groups with the temporal order in which they are
+released.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.7\textwidth]{images/drop.png}
+    \caption{Example of a release operation. Since only one gripper plate can
+    open at a time, the opening side must face either the boundary of the layer
+    or a position that has not yet been filled.}
+    \label{fig:drop-example}
+\end{figure}
+
+The problem can therefore be decomposed into two related subproblems:
+
+\begin{enumerate}[label=(\Alph*)]
+  \item \textbf{Grouping.} Partition the \(n\) boxes into groups that are
+        contiguous along the \(x\)-axis, belong to the same row, and fit within
+        the gripper capacity.
+  \item \textbf{Scheduling.} Determine an ordering of the groups and assign an
+        opening plate side to each group, so that the opening plate always
+        faces a free direction at the time of release.
 \end{enumerate}
 
-We encode (a) and (b) jointly in a single MiniZinc model, solved as a
-satisfiability problem.
+\subsection{Parameters and Derived Constants}
 
-% =============================================================================
-\section{Model}
-\label{sec:model}
+Based on this formulation, the MiniZinc model uses the following input
+parameters:
 
-The MiniZinc model lives in \texttt{model.mzn}. We describe its parameters,
-decision variables, and constraints in detail.
+\begin{itemize}
+  \item the total number of boxes in the layer, denoted by
+        \texttt{n\_boxes};
+  \item the grid dimensions of the layer, denoted by
+        \texttt{boxes\_along\_x} and \texttt{boxes\_along\_y};
+  \item the box dimension parallel to the gripper, denoted by
+        \texttt{boxes\_x\_dim}. In the natural orientation,
+        \texttt{boxes\_x\_dim} corresponds to \(x\); if the layer is rotated,
+        it corresponds to \(y\);
+  \item the gripper size \(S\), denoted by \texttt{grip\_size}.
+\end{itemize}
 
-\subsection{Parameters and derived constants}
-
-\begin{lstlisting}[caption={Parameters and derived constants.}]
-par int: n_packs;
-par int: packs_x_dim;
-par int: packs_along_x;
-par int: packs_along_y;
+These parameters are declared in MiniZinc as follows:
+\vspace{0.5cm}
+\begin{lstlisting}
+par int: n_boxes;
+par int: boxes_x_dim;
+par int: boxes_along_x;
+par int: boxes_along_y;
 par int: grip_size;
-
-par int: max_pkble_packs = (grip_size + packs_x_dim) div packs_x_dim;
-par int: groups_per_row  = (packs_along_x + max_pkble_packs - 1)
-                            div max_pkble_packs;
-par int: n_groups        = packs_along_y * groups_per_row;
 \end{lstlisting}
+\vspace{0.5cm}
+From these inputs, the model derives three constants. First, the maximum number
+of boxes that can be picked in a single operation is computed directly from the
+gripper geometry:
+\[
+    \texttt{max\_pkble\_boxes}
+    =
+    \left\lfloor
+    \frac{\texttt{grip\_size} + \texttt{boxes\_x\_dim}}
+         {\texttt{boxes\_x\_dim}}
+    \right\rfloor .
+\]
+Second, the minimum number of groups required to cover one row is obtained by
+ceiling division:
+\[
+    \texttt{groups\_per\_row}
+    =
+    \left\lceil
+    \frac{\texttt{boxes\_along\_x}}
+         {\texttt{max\_pkble\_boxes}}
+    \right\rceil .
+\]
+Finally, the total number of groups is obtained by multiplying the number of
+groups per row by the number of rows:
+\[
+    \texttt{n\_groups}
+    =
+    \texttt{boxes\_along\_y}
+    \cdot
+    \texttt{groups\_per\_row}.
+\]
 
-\paragraph{Inputs.} \texttt{n\_packs} is the total number of boxes on the
-pallet. \texttt{packs\_along\_x} and \texttt{packs\_along\_y} are the grid
-dimensions of the placement layer. \texttt{packs\_x\_dim} is the box side
-parallel to the gripper (so \texttt{packs\_x\_dim}~$= x$ in the natural
-orientation, or $y$ if the layer is rotated). \texttt{grip\_size} is $S$.
+\newpage
+The corresponding MiniZinc declarations are:
+\vspace{0.5cm}
+\begin{lstlisting}
+par int: max_pkble_boxes = (grip_size + boxes_x_dim) div boxes_x_dim;
 
-\paragraph{Derived.}
-\begin{itemize}
-  \item \texttt{max\_pkble\_packs} $= \lfloor (S + x)/x \rfloor$ is the
-        gripper capacity in boxes, derived directly from the geometry.
-  \item \texttt{groups\_per\_row} is the minimum number of groups needed
-        to cover one row, computed by ceiling division.
-  \item \texttt{n\_groups} fixes the total number of groups. We use a
-        \emph{fixed} group cardinality to make the model fully static:
-        every group is filled, and the partition is forced to be a
-        contiguous prefix-sum sequence.
-\end{itemize}
+par int: groups_per_row = (boxes_along_x + max_pkble_boxes - 1)
+                           div max_pkble_boxes;
 
-\subsection{Decision variables}
+par int: n_groups = boxes_along_y * groups_per_row;
+\end{lstlisting}
+% =============================================================================
+\section{Grouping}
+\label{sec:model}
+This part of the model admits several possible CP encodings. A natural but
+expensive formulation is a \emph{fully enumerated} encoding, where each group
+explicitly stores the identifiers of all boxes it contains. Since groups may
+have different lengths, this representation usually requires a two-dimensional
+array with padding values for shorter groups.
+\vspace{0.5cm}
+\begin{lstlisting}
+array[1..n_groups, 1..max_pkble_packs] of var 0..n_packs: groups;
+\end{lstlisting}
+\vspace{0.5cm}
 
-\begin{lstlisting}[caption={Decision variables.}]
-array[1..n_groups] of var 1..n_packs:         group_start;
+Here, the value \(0\) is used as a dummy value to represent an empty slot.
+This representation makes group membership explicit and easy to inspect.
+However, it introduces a large number of decision variables and requires
+additional constraints to enforce the structure of a valid solution. In
+particular, the model must ensure that each box appears exactly once, that
+non-empty positions inside each group are ordered, and that the groups are
+consistent with the geometric ordering of the layer.
+
+\vspace{0.5cm}
+\begin{lstlisting}
+% Each pack identifier 1..n_packs appears exactly once.
+constraint
+  forall(v in 1..n_packs) (
+    count(array1d(groups), v) = 1
+  );
+
+% Non-empty entries are placed before padding values.
+constraint
+  forall(g in 1..n_groups, j in 1..max_pkble_packs-1) (
+    groups[g,j] = 0 -> groups[g,j+1] = 0
+  );
+
+% Pack identifiers are strictly increasing inside each group.
+constraint
+  forall(g in 1..n_groups, j in 1..max_pkble_packs-1) (
+    groups[g,j] != 0 /\ groups[g,j+1] != 0 ->
+      groups[g,j] < groups[g,j+1]
+  );
+\end{lstlisting}
+\vspace{0.5cm}
+
+A second possibility is a \emph{binary assignment} encoding, where a Boolean
+variable states whether pack \(i\) belongs to group \(g\). This representation
+can be written as follows:
+
+\vspace{0.5cm}
+\begin{lstlisting}
+array[1..n_groups, 1..n_packs] of var bool: belongs_to_group;
+\end{lstlisting}
+\vspace{0.5cm}
+
+In this case, group membership is represented by the truth value of
+\texttt{belongs\_to\_group[g,i]}. Although this encoding is expressive, it is
+even larger than the fully enumerated representation. It also does not encode
+contiguity or same-row membership directly. These properties must be
+reconstructed through additional channeling constraints.
+
+For this reason, the adopted model represents each group using its
+\emph{start index} and \emph{length}. An equivalent formulation could use the
+start and end indices instead. This interval-style representation is more
+compact because each group is described by only two main variables. Contiguity
+is implicit: once the start index and the length are known, the boxes in the
+group are uniquely determined. The same-row constraint can also be expressed
+directly by requiring the interval not to cross a row boundary. As a result,
+the model avoids explicit membership variables and reduces the number of
+constraints needed to describe valid groups.
+
+\vspace{0.5cm}
+\begin{lstlisting}
+array[1..n_groups] of var 1..n_packs: group_start;
 array[1..n_groups] of var 1..max_pkble_packs: group_len;
-
-array[1..n_groups] of var 1..n_groups: drop_order;
-array[1..n_groups] of var 0..1:        plate;
 \end{lstlisting}
+\vspace{0.5cm}
 
-\begin{itemize}
-  \item \texttt{group\_start[g]} -- index of the first pack of group $g$
-        in row-major order over the pallet grid.
-  \item \texttt{group\_len[g]} -- number of packs in group $g$,
-        bounded by the gripper capacity.
-  \item \texttt{drop\_order[g]} -- the temporal step (1..n\_groups) at
-        which group $g$ is dropped on the pallet.
-  \item \texttt{plate[g]} -- which plate opens when group $g$ is released
-        (0 = left plate, 1 = right plate).
-\end{itemize}
+The adopted encoding uses two arrays: \texttt{group\_start}, which stores the
+first box of each group, and \texttt{group\_len}, which stores the number of
+boxes in that group.
 
-\subsection{Grouping constraints}
-
-\begin{lstlisting}[caption={Contiguity and row-boundary constraints.}]
+\vspace{0.5cm}
+\begin{lstlisting}
 constraint group_start[1] = 1;
 
-constraint forall(i in 1..n_groups - 1)(
-  group_start[i + 1] = group_start[i] + group_len[i]
+constraint forall(g in 1..n_groups - 1)(
+  group_start[g + 1] = group_start[g] + group_len[g]
 );
 
 constraint group_start[n_groups] + group_len[n_groups] - 1 = n_packs;
 
-constraint forall(i in 1..n_groups)(
-  (group_start[i] - 1)                div packs_along_x =
-  (group_start[i] + group_len[i] - 2) div packs_along_x
+constraint forall(g in 1..n_groups)(
+  (group_start[g] - 1) div packs_along_x =
+  (group_start[g] + group_len[g] - 2) div packs_along_x
 );
 \end{lstlisting}
+\vspace{0.5cm}
 
-The first three constraints together force the groups to form a contiguous
-partition of $\{1,\dots,n\}$: the first group starts at pack 1, each
-subsequent group starts where the previous one ended, and the last group
-ends at pack $n$. This makes \texttt{group\_start} a prefix-sum of
-\texttt{group\_len}, which gives the solver a tight propagation handle.
+The first three constraints define the groups as consecutive intervals over
+the row-major ordering of the packs. The first group starts from pack \(1\),
+and each following group starts immediately after the last pack of the previous
+group. The final constraint in this block forces the last group to end at pack
+\(n\). Together, these conditions ensure that all packs are covered exactly
+once, without gaps or overlaps.
 
-The fourth constraint enforces the \emph{same-row} requirement of the
-gripper: a group must not straddle a row boundary in the row-major
-indexing. Using integer division by \texttt{packs\_along\_x}, the row index
-of the first pack must equal the row index of the last pack.
+The fourth constraint enforces the geometric feasibility of each group. Since
+the gripper can only pick boxes aligned along the \(x\)-axis, a group cannot
+cross from one row to the next. The constraint therefore compares the row index
+of the first pack in the group with the row index of the last pack. If the two
+indices are equal, the whole interval lies on the same row.
 
-\subsection{Neighbor structure (parameter, not variable)}
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Scheduling}
 
-\begin{lstlisting}[caption={Left/right neighbors as par arrays.}]
+Once the grouping stage has fixed the horizontal intervals, the second part of
+the model decides when each group is released and which gripper plate opens.
+As in the grouping stage, several encodings are possible. A direct
+time-expanded formulation would introduce a Boolean variable for every pair
+of group and time step, stating whether a group has already been placed at a
+given moment.
+
+\vspace{0.5cm}
+\begin{lstlisting}
+array[1..n_groups, 1..n_groups] of var bool: already_placed;
+array[1..n_groups] of var 0..1: plate;
+\end{lstlisting}
+\vspace{0.5cm}
+
+This representation makes the state of the pallet explicit at every step.
+However, it is unnecessarily large for this problem. It also requires
+additional channeling constraints to ensure that each group appears at exactly
+one time step and that the Boolean occupancy matrix is consistent with the
+chosen order.
+
+The adopted model instead represents the schedule by assigning a single
+integer position to each group. The array \texttt{drop\_order} stores the
+time step at which group \(g\) is released, while \texttt{plate} stores the
+opening side used for that release. The value \(0\) denotes the left plate and
+the value \(1\) denotes the right plate.
+
+\vspace{0.5cm}
+\begin{lstlisting}
+array[1..n_groups] of var 1..n_groups: drop_order;
+array[1..n_groups] of var 0..1:        plate;
+\end{lstlisting}
+\vspace{0.5cm}
+
+The only global constraint needed to make \texttt{drop\_order} a valid
+schedule is \texttt{alldifferent}. Since every value belongs to the domain
+\(1,\dots,\texttt{n\_groups}\), enforcing pairwise difference means that each
+release step is used exactly once.
+
+\vspace{0.5cm}
+\begin{lstlisting}
+constraint alldifferent(drop_order);
+\end{lstlisting}
+\vspace{0.5cm}
+
+The release feasibility constraint depends on the horizontal neighbors of each
+group. These neighbors do not need to be decision variables. The grouping
+constraints force every row to contain exactly \texttt{groups\_per\_row}
+groups, numbered consecutively in row-major order. Therefore, the position of
+group \(g\) inside its row is given by
+\((g-1) \bmod \texttt{groups\_per\_row}\), and its left and right neighbors
+can be computed directly from the group index. The sentinel value \(0\) is
+used when a group lies on the boundary of a row.
+
+\vspace{0.5cm}
+\begin{lstlisting}
 array[1..n_groups] of par int: left_neighbor =
   [ if (g - 1) mod groups_per_row > 0
-    then g - 1 else 0 endif
+    then g - 1
+    else 0
+    endif
   | g in 1..n_groups ];
 
 array[1..n_groups] of par int: right_neighbor =
   [ if (g - 1) mod groups_per_row < groups_per_row - 1
-    then g + 1 else 0 endif
+    then g + 1
+    else 0
+    endif
   | g in 1..n_groups ];
 \end{lstlisting}
+\vspace{0.5cm}
 
-Because groups are filled in row-major order with a fixed
-\texttt{groups\_per\_row}, the spatial adjacency between groups is
-\emph{known at compile time}: it is a function of the group index alone, not
-of \texttt{group\_start} or \texttt{group\_len}. We exploit this by declaring
-\texttt{left\_neighbor} and \texttt{right\_neighbor} as \texttt{par} (not
-\texttt{var}) arrays, computed from index arithmetic. A neighbor index of
-$0$ is the sentinel for ``no neighbor on that side'' (i.e. row boundary).
-This removes a layer of decision variables and lets the flattener fully
-unroll the scheduling constraint below.
+Declaring these arrays as \texttt{par} rather than \texttt{var} keeps the
+neighbor structure outside the search space. The solver therefore searches
+only over the ordering of the groups and the plate side assigned to each
+release.
 
-\subsection{Scheduling constraints}
+The final constraint encodes the physical restriction that, when a group is
+released, the opening plate must face a free direction. A direction is free if
+the corresponding neighbor does not exist, meaning the group is on the
+external boundary of the row, or if that neighbor is scheduled later and is
+therefore still empty at the current release step.
 
-\begin{lstlisting}[caption={Plate-collision constraint and step permutation.}]
-constraint alldifferent(drop_order);
-
+\vspace{0.5cm}
+\begin{lstlisting}
 constraint forall(g in 1..n_groups)(
   (plate[g] = 0 /\
     (left_neighbor[g]  = 0 \/
@@ -217,30 +396,28 @@ constraint forall(g in 1..n_groups)(
     (right_neighbor[g] = 0 \/
      drop_order[right_neighbor[g]] > drop_order[g]))
 );
+\end{lstlisting}
+\vspace{0.5cm}
 
+For each group \(g\), the first branch of the disjunction corresponds to
+opening the left plate. This is feasible only if there is no left neighbor, or
+if the left neighbor has a larger \texttt{drop\_order} value than \(g\). The
+second branch applies the same reasoning to the right plate. In this way, the
+constraint couples the two scheduling decisions: once the plate side is fixed,
+the model also fixes which neighboring group must be absent at the time of
+release.
+
+The model is a pure feasibility problem:
+
+\vspace{0.5cm}
+\begin{lstlisting}
 solve satisfy;
 \end{lstlisting}
+\vspace{0.5cm}
 
-\paragraph{Permutation.} \texttt{alldifferent(drop\_order)} together with
-the domain $1..n\_groups$ forces \texttt{drop\_order} to be a permutation:
-each step $1,\dots,n\_groups$ is used exactly once.
-
-\paragraph{Plate-collision.} For each group $g$, we require that the
-\emph{opening} plate faces a free side at the moment of release. ``Free''
-means either:
-\begin{itemize}
-  \item the relevant neighbor does not exist (sentinel $0$, group is on a
-        row boundary), or
-  \item the neighbor exists but is dropped \emph{later} than $g$, so the
-        cell on that side is still empty.
-\end{itemize}
-Encoding this as a disjunction over \texttt{plate[g]} couples the
-two scheduling decisions: once \texttt{plate} is fixed for a group, the
-required temporal ordering with one specific neighbor is determined.
-
-\paragraph{Solve.} The model is a pure feasibility problem (\texttt{solve
-satisfy}); we do not optimize the schedule, since any ordering that
-respects the plate-collision constraint is a valid pick-and-place plan.
+No objective function is required, since any assignment of
+\texttt{drop\_order} and \texttt{plate} that satisfies the neighbor constraint
+is a valid pick-and-place plan.
 
 % =============================================================================
 \section{Driving the model from Python}
@@ -256,7 +433,7 @@ scripts compose the pipeline:
         layout and a step-by-step drop schedule as PDFs. The Python side
         is responsible for picking the orientation that fits more boxes
         on the pallet (\texttt{lib/utils.py}: \texttt{gen\_pallet\_info}),
-        deriving \texttt{packs\_x\_dim} and the gripper size $S = 3x$,
+        deriving \texttt{boxes\_x\_dim} and the gripper size $S = 3x$,
         and translating the model output (the four arrays
         \texttt{group\_start}, \texttt{group\_len}, \texttt{drop\_order},
         \texttt{plate}) into a high-level \emph{schedule} of drop
@@ -283,9 +460,9 @@ opening plate side).
 To make the output of the model concrete, we run \texttt{sample.py} on a
 $70 \times 70$ pack and an $800 \times 1200$ pallet. The geometry helper
 chooses the rotation that maximises pack count, yielding an
-$11 \times 17$ grid (\(n = 187\) packs). With \(S = 3 \cdot 70 = 210\),
-the gripper capacity is \(\lfloor (210 + 70)/70 \rfloor = 4\) packs, and
-each row of 11 packs is split into 3 groups of sizes $3+4+4$, for a
+$11 \times 17$ grid (\(n = 187\) boxes). With \(S = 3 \cdot 70 = 210\),
+the gripper capacity is \(\lfloor (210 + 70)/70 \rfloor = 4\) boxes, and
+each row of 11 boxes is split into 3 groups of sizes $3+4+4$, for a
 total of \(n\_groups = 51\).
 
 \begin{figure}[h]
@@ -375,20 +552,20 @@ local MiniZinc installation, with a per-run timeout of 300 seconds.
   \label{tab:bench-grid}
 \end{table}
 
-The gripper size is fixed at $S = 3 \cdot \texttt{packs\_x\_dim}$, the
+The gripper size is fixed at $S = 3 \cdot \texttt{boxes\_x\_dim}$, the
 maximum allowed by the project specification.
 
 \subsection{Overall scaling}
 
 Figure~\ref{fig:scaling-overall} shows solve time as a function of the
-total number of packs on the pallet, on a logarithmic axis, for every
+total number of boxes on the pallet, on a logarithmic axis, for every
 solver across all instances. The geometric mean and min/max range per
 solver is summarised in Figure~\ref{fig:solver-summary}.
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=0.85\linewidth]{images/scaling_overall_n_packs.pdf}
-  \caption{Solve time vs. total number of packs --- all solvers, all
+  \includegraphics[width=0.85\linewidth]{images/scaling_overall_n_boxes.pdf}
+  \caption{Solve time vs. total number of boxes --- all solvers, all
   instances. Log scale on the time axis.}
   \label{fig:scaling-overall}
 \end{figure}
@@ -406,38 +583,38 @@ solver is summarised in Figure~\ref{fig:solver-summary}.
 Splitting the data by pallet preset (Figure~\ref{fig:scaling-per-pallet})
 isolates the effect of pack count from pallet shape: for a fixed pallet,
 the curves are functions of pack count alone, while differences between
-pallets reflect the impact of \texttt{packs\_along\_x} and
-\texttt{packs\_along\_y} on the number of groups.
+pallets reflect the impact of \texttt{boxes\_along\_x} and
+\texttt{boxes\_along\_y} on the number of groups.
 
 \begin{figure}[h]
   \centering
   \begin{subfigure}[t]{0.48\linewidth}
-    \includegraphics[width=\linewidth]{images/scaling_europallet_n_packs.pdf}
+    \includegraphics[width=\linewidth]{images/scaling_europallet_n_boxes.pdf}
     \caption{Europallet}
   \end{subfigure}\hfill
   \begin{subfigure}[t]{0.48\linewidth}
-    \includegraphics[width=\linewidth]{images/scaling_industrie_n_packs.pdf}
+    \includegraphics[width=\linewidth]{images/scaling_industrie_n_boxes.pdf}
     \caption{Industrie}
   \end{subfigure}
 
   \medskip
 
   \begin{subfigure}[t]{0.48\linewidth}
-    \includegraphics[width=\linewidth]{images/scaling_us_40x48_n_packs.pdf}
+    \includegraphics[width=\linewidth]{images/scaling_us_40x48_n_boxes.pdf}
     \caption{US 40$\times$48}
   \end{subfigure}\hfill
   \begin{subfigure}[t]{0.48\linewidth}
-    \includegraphics[width=\linewidth]{images/scaling_halfpallet_n_packs.pdf}
+    \includegraphics[width=\linewidth]{images/scaling_halfpallet_n_boxes.pdf}
     \caption{Half-pallet}
   \end{subfigure}
 
   \medskip
 
   \begin{subfigure}[t]{0.48\linewidth}
-    \includegraphics[width=\linewidth]{images/scaling_australian_n_packs.pdf}
+    \includegraphics[width=\linewidth]{images/scaling_australian_n_boxes.pdf}
     \caption{Australian}
   \end{subfigure}
-  \caption{Solve time vs. number of packs, broken down by pallet preset.}
+  \caption{Solve time vs. number of boxes, broken down by pallet preset.}
   \label{fig:scaling-per-pallet}
 \end{figure}
 

@@ -8,20 +8,20 @@ import os
 
 def solve_instance(pack_x, pack_y, pallet_x, pallet_y, solver_name="gecode"):
     pallet_info = gen_pallet_info(pack_x, pack_y, pallet_x, pallet_y)
-    packs_x_dim = pack_x if not pallet_info["rotated"] else pack_y
-    grip_size   = 3 * packs_x_dim
+    boxes_x_dim = pack_x if not pallet_info["rotated"] else pack_y
+    grip_size   = 3 * boxes_x_dim
 
     model    = Model("model.mzn")
     solver   = Solver.lookup(solver_name)
     instance = Instance(solver, model)
-    instance["n_packs"]       = pallet_info["n_packs"]
-    instance["packs_x_dim"]   = packs_x_dim
-    instance["packs_along_x"] = pallet_info["packs_along_x"]
-    instance["packs_along_y"] = pallet_info["packs_along_y"]
+    instance["n_boxes"]       = pallet_info["n_boxes"]
+    instance["boxes_x_dim"]   = boxes_x_dim
+    instance["boxes_along_x"] = pallet_info["boxes_along_x"]
+    instance["boxes_along_y"] = pallet_info["boxes_along_y"]
     instance["grip_size"]     = grip_size
 
-    print(f"Solving with {solver_name}: {pallet_info['n_packs']} packs in "
-          f"{pallet_info['packs_along_x']}x{pallet_info['packs_along_y']} grid "
+    print(f"Solving with {solver_name}: {pallet_info['n_boxes']} boxes in "
+          f"{pallet_info['boxes_along_x']}x{pallet_info['boxes_along_y']} grid "
           f"(rotated={pallet_info['rotated']})")
     result = instance.solve()
 
@@ -36,7 +36,7 @@ def solve_instance(pack_x, pack_y, pallet_x, pallet_y, solver_name="gecode"):
             {
                 "step":        drop_order[g],
                 "group_index": g + 1,
-                "packs":       groups[g],
+                "boxes":       groups[g],
                 "open_plate":  "left" if plate[g] == 0 else "right",
             }
             for g in range(len(group_start))
@@ -50,12 +50,12 @@ def solve_instance(pack_x, pack_y, pallet_x, pallet_y, solver_name="gecode"):
     return {
         "groups":         groups,
         "schedule":       schedule,
-        "packs_along_x":  pallet_info["packs_along_x"],
-        "packs_along_y":  pallet_info["packs_along_y"],
+        "boxes_along_x":  pallet_info["boxes_along_x"],
+        "boxes_along_y":  pallet_info["boxes_along_y"],
         "cell_w":         cell_w,
         "cell_h":         cell_h,
         "rotated":        pallet_info["rotated"],
-        "n_packs":        pallet_info["n_packs"],
+        "n_boxes":        pallet_info["n_boxes"],
     }
 
 

@@ -16,7 +16,7 @@ PALLET_PRESETS = {
     "australian":   (1165, 1165),
 }
 
-PACK_SIZES = [
+BOX_SIZES = [
     (50, 50),
     (70, 70),
     (100, 100),
@@ -40,33 +40,33 @@ def available_solvers(names):
     return found
 
 
-def run_one(model, solver_name, pack_x, pack_y, pallet_x, pallet_y, timeout_s):
-    pallet_info = gen_pallet_info(pack_x, pack_y, pallet_x, pallet_y)
-    packs_x_dim = pack_x if not pallet_info["rotated"] else pack_y
-    grip_size = 3 * packs_x_dim
+def run_one(model, solver_name, box_x, box_y, pallet_x, pallet_y, timeout_s):
+    pallet_info = gen_pallet_info(box_x, box_y, pallet_x, pallet_y)
+    boxes_x_dim = box_x if not pallet_info["rotated"] else box_y
+    grip_size = 3 * boxes_x_dim
 
     solver = Solver.lookup(solver_name)
     instance = Instance(solver, model)
-    instance["n_packs"]       = pallet_info["n_packs"]
-    instance["packs_x_dim"]   = packs_x_dim
-    instance["packs_along_x"] = pallet_info["packs_along_x"]
-    instance["packs_along_y"] = pallet_info["packs_along_y"]
+    instance["n_boxes"]       = pallet_info["n_boxes"]
+    instance["boxes_x_dim"]   = boxes_x_dim
+    instance["boxes_along_x"] = pallet_info["boxes_along_x"]
+    instance["boxes_along_y"] = pallet_info["boxes_along_y"]
     instance["grip_size"]     = grip_size
 
-    max_pkble = (grip_size + packs_x_dim) // packs_x_dim
-    groups_per_row = (pallet_info["packs_along_x"] + max_pkble - 1) // max_pkble
-    n_groups = pallet_info["packs_along_y"] * groups_per_row
+    max_pkble = (grip_size + boxes_x_dim) // boxes_x_dim
+    groups_per_row = (pallet_info["boxes_along_x"] + max_pkble - 1) // max_pkble
+    n_groups = pallet_info["boxes_along_y"] * groups_per_row
 
     record = {
         "solver":         solver_name,
-        "pack_x":         pack_x,
-        "pack_y":         pack_y,
+        "box_x":         box_x,
+        "box_y":         box_y,
         "pallet_x":       pallet_x,
         "pallet_y":       pallet_y,
-        "n_packs":        pallet_info["n_packs"],
+        "n_boxes":        pallet_info["n_boxes"],
         "n_groups":       n_groups,
-        "packs_along_x":  pallet_info["packs_along_x"],
-        "packs_along_y":  pallet_info["packs_along_y"],
+        "boxes_along_x":  pallet_info["boxes_along_x"],
+        "boxes_along_y":  pallet_info["boxes_along_y"],
         "grip_size":      grip_size,
         "timeout_s":      timeout_s,
     }
@@ -104,16 +104,16 @@ def main():
     print(f"Running solvers: {solvers}")
 
     results = []
-    total = len(PALLET_PRESETS) * len(PACK_SIZES) * len(solvers)
+    total = len(PALLET_PRESETS) * len(BOX_SIZES) * len(solvers)
     i = 0
     for pallet_name, (pallet_x, pallet_y) in PALLET_PRESETS.items():
-        for (pack_x, pack_y) in PACK_SIZES:
+        for (box_x, box_y) in BOX_SIZES:
             for solver_name in solvers:
                 i += 1
-                print(f"[{i}/{total}] {solver_name} | {pallet_name} {pallet_x}x{pallet_y} | pack {pack_x}x{pack_y}")
-                rec = run_one(model, solver_name, pack_x, pack_y, pallet_x, pallet_y, TIMEOUT_SECONDS)
+                print(f"[{i}/{total}] {solver_name} | {pallet_name} {pallet_x}x{pallet_y} | box {box_x}x{box_y}")
+                rec = run_one(model, solver_name, box_x, box_y, pallet_x, pallet_y, TIMEOUT_SECONDS)
                 rec["pallet_preset"] = pallet_name
-                print(f"   → status={rec['status']} wall={rec['wall_time']:.3f}s n_packs={rec['n_packs']} n_groups={rec['n_groups']}")
+                print(f"   → status={rec['status']} wall={rec['wall_time']:.3f}s n_boxes={rec['n_boxes']} n_groups={rec['n_groups']}")
                 results.append(rec)
 
     out = {
@@ -121,7 +121,7 @@ def main():
         "timeout_s":    TIMEOUT_SECONDS,
         "solvers":      solvers,
         "pallet_presets": {k: {"x": v[0], "y": v[1]} for k, v in PALLET_PRESETS.items()},
-        "pack_sizes":   [{"x": x, "y": y} for (x, y) in PACK_SIZES],
+        "box_sizes":   [{"x": x, "y": y} for (x, y) in BOX_SIZES],
         "results":      results,
     }
 

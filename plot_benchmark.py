@@ -14,8 +14,8 @@ OUTPUT_DIR = ROOT_DIR / Path("plots")
 TIME_FLOOR  = 1e-4  # avoid log(0) for solvers that report solve_time = 0
 
 # Field used as X axis on scaling plots.
-# One of: "n_packs", "n_groups", "pack_x", "pack_y"
-X_AXIS = "n_packs"
+# One of: "n_boxes", "n_groups", "box_x", "box_y"
+X_AXIS = "n_boxes"
 
 
 def load_results(path):
@@ -33,11 +33,11 @@ def load_results(path):
         rows.append({
             "solver":   r["solver"],
             "pallet":   r["pallet_preset"],
-            "pack":     f"{r['pack_x']}x{r['pack_y']}",
-            "n_packs":  r["n_packs"],
+            "box":     f"{r['box_x']}x{r['box_y']}",
+            "n_boxes":  r["n_boxes"],
             "n_groups": r["n_groups"],
-            "pack_x":   r["pack_x"],
-            "pack_y":   r["pack_y"],
+            "box_x":   r["box_x"],
+            "box_y":   r["box_y"],
             "time":     max(t, TIME_FLOOR),
             "wall":     r["wall_time"],
             "status":   r["status"],
@@ -184,7 +184,7 @@ def main():
     print(f"Loaded {len(rows)} successful runs ({skipped} ERROR rows skipped)")
     print(f"Solvers: {sorted(solvers)}")
 
-    valid_axes = {"n_packs", "n_groups", "pack_x", "pack_y"}
+    valid_axes = {"n_boxes", "n_groups", "box_x", "box_y"}
     if X_AXIS not in valid_axes:
         raise SystemExit(f"X_AXIS must be one of {valid_axes}, got {X_AXIS!r}")
 
