@@ -4,7 +4,6 @@ from lib.utils import gen_pallet_info
 from lib.visualize import render_pallet, render_schedule
 
 from pathlib import Path
-import os
 
 def solve_instance(box_x, box_y, pallet_x, pallet_y, solver_name="gecode"):
     pallet_info = gen_pallet_info(box_x, box_y, pallet_x, pallet_y)
@@ -14,6 +13,7 @@ def solve_instance(box_x, box_y, pallet_x, pallet_y, solver_name="gecode"):
     model = Model("model.mzn")
     solver = Solver.lookup(solver_name)
     instance = Instance(solver, model)
+
     instance["n_boxes"] = pallet_info["n_boxes"]
     instance["boxes_x_dim"] = boxes_x_dim
     instance["boxes_along_x"] = pallet_info["boxes_along_x"]

@@ -16,6 +16,9 @@ TIME_FLOOR  = 1e-4  # safety lower bound for solvers that report solve_time = 0
 # One of: "n_boxes", "n_groups", "box_x", "box_y"
 X_AXIS = "n_boxes"
 
+# Solvers to exclude from plots (e.g. {"highs", "chuffed"}).
+SKIP_SOLVERS = set()#{"highs"}
+
 
 def load_results(path):
     with open(path) as f:
@@ -66,7 +69,8 @@ def plot_scaling_overall(rows, colors, out_path, x_axis):
                 markersize=5, linewidth=1.4, alpha=0.85)
 
     ax.set_xlabel(x_axis)
-    ax.set_ylabel("solve_time (s)")
+    ax.set_ylabel("solve_time (s, log scale)")
+    ax.set_yscale("log")
     ax.legend()
     plt.tight_layout()
     plt.savefig(out_path, format="pdf", dpi=600)
@@ -91,7 +95,8 @@ def plot_scaling_per_pallet(rows, colors, out_dir, x_axis):
             ax.plot(xs, ys, "o-", label=solver, color=colors[solver],
                     markersize=6, linewidth=1.6, alpha=0.85)
         ax.set_xlabel(x_axis)
-        ax.set_ylabel("solve_time (s)")
+        ax.set_ylabel("solve_time (s, log scale)")
+        ax.set_yscale("log")
         ax.legend()
         plt.tight_layout()
         out_path = out_dir / f"scaling_{pallet}_{x_axis}.pdf"
@@ -102,32 +107,33 @@ def plot_scaling_per_pallet(rows, colors, out_dir, x_axis):
 
 
 def plot_solver_summary(rows, colors, out_path):
-    """Bar chart: mean solve_time per solver, with min/max whiskers."""
+    """Bar chart: mean solve_time per solver, with std-deviation whiskers (log y)."""
     by_solver = defaultdict(list)
     for r in rows:
         by_solver[r["solver"]].append(r["time"])
 
     solvers = sorted(by_solver.keys())
     means = []
-    mins = []
-    maxs = []
+    stds = []
     for s in solvers:
         ts = by_solver[s]
-        means.append(sum(ts) / len(ts))
-        mins.append(min(ts))
-        maxs.append(max(ts))
+        m = sum(ts) / len(ts)
+        var = sum((t - m) ** 2 for t in ts) / len(ts)
+        means.append(m)
+        stds.append(var ** 0.5)
 
     fig, ax = plt.subplots(figsize=(8, 5))
     xs = list(range(len(solvers)))
     bar_colors = [colors[s] for s in solvers]
-    ax.bar(xs, means, color=bar_colors, alpha=0.8)
-    for x, lo, hi in zip(xs, mins, maxs):
-        ax.plot([x, x], [lo, hi], color="black", linewidth=1)
-        ax.plot([x - 0.1, x + 0.1], [lo, lo], color="black", linewidth=1)
-        ax.plot([x - 0.1, x + 0.1], [hi, hi], color="black", linewidth=1)
+    # Clip the lower whisker to TIME_FLOOR so log scale stays well-defined.
+    lo_err = [min(s, max(m - TIME_FLOOR, 0)) for m, s in zip(means, stds)]
+    hi_err = stds
+    ax.bar(xs, means, color=bar_colors, alpha=0.8,
+           yerr=[lo_err, hi_err], capsize=4, ecolor="black")
+    ax.set_yscale("log")
     ax.set_xticks(xs)
     ax.set_xticklabels(solvers)
-    ax.set_ylabel("solve_time (s)")
+    ax.set_ylabel("solve_time (s, log scale)")
     plt.tight_layout()
     plt.savefig(out_path, format="pdf", dpi=600)
     plt.close(fig)
@@ -152,7 +158,8 @@ def plot_scaling_by_grip(rows, colors, out_path):
                 markersize=6, linewidth=1.6, alpha=0.85)
 
     ax.set_xlabel(r"grip multiplier $k$ (grip_size = $k \cdot$ boxes_x_dim)")
-    ax.set_ylabel("solve_time (s, mean)")
+    ax.set_ylabel("solve_time (s, mean, log scale)")
+    ax.set_yscale("log")
     ax.set_xticks(sorted({r["grip_mult"] for r in rows}))
     ax.legend()
     plt.tight_layout()
@@ -179,7 +186,8 @@ def plot_scaling_overall_per_grip(rows, colors, out_dir, x_axis):
             ax.plot(xs, ys, "o-", label=solver, color=colors[solver],
                     markersize=5, linewidth=1.4, alpha=0.85)
         ax.set_xlabel(x_axis)
-        ax.set_ylabel("solve_time (s)")
+        ax.set_ylabel("solve_time (s, log scale)")
+        ax.set_yscale("log")
         ax.legend()
         plt.tight_layout()
         out_path = out_dir / f"scaling_overall_{x_axis}_grip{g}x.pdf"
@@ -201,13 +209,15 @@ def plot_wall_vs_solve(rows, colors, out_path):
         ys = [p[1] for p in pts]
         ax.scatter(xs, ys, label=solver, color=colors[solver], s=30, alpha=0.75, edgecolor="black", linewidth=0.3)
 
-    lim_lo = 0.0
+    lim_lo = TIME_FLOOR
     lim_hi = max(max(r["wall"] for r in rows), max(r["time"] for r in rows)) * 1.05
     ax.plot([lim_lo, lim_hi], [lim_lo, lim_hi], "k--", alpha=0.4, label="y = x")
+    ax.set_xscale("log")
+    ax.set_yscale("log")
     ax.set_xlim(lim_lo, lim_hi)
     ax.set_ylim(lim_lo, lim_hi)
-    ax.set_xlabel("solve_time (s)")
-    ax.set_ylabel("wall_time (s)")
+    ax.set_xlabel("solve_time (s, log scale)")
+    ax.set_ylabel("wall_time (s, log scale)")
     ax.legend()
     plt.tight_layout()
     plt.savefig(out_path, format="pdf", dpi=600)
@@ -216,12 +226,15 @@ def plot_wall_vs_solve(rows, colors, out_path):
 
 def main():
     data, rows = load_results(INPUT_FILE)
+    if SKIP_SOLVERS:
+        rows = [r for r in rows if r["solver"] not in SKIP_SOLVERS]
     if not rows:
         print("No usable rows in benchmark_results.json")
         return
 
     OUTPUT_DIR.mkdir(exist_ok=True)
     solvers = {r["solver"] for r in rows}
+    
     colors = solver_color_map(solvers)
 
     skipped = sum(1 for r in data["results"] if r["status"] == "ERROR")

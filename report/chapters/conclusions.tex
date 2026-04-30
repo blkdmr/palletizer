@@ -1,0 +1,27 @@
+\section{Conclusions}
+
+The project shows that the robot movement planning problem can be expressed
+compactly as a Constraint Programming model by separating it into grouping and
+scheduling decisions. Representing each group through its start index and
+length avoids the larger fully enumerated and binary-membership encodings,
+while still capturing the geometric constraints of the gripper. The release
+schedule can then be described with a small number of ordering variables and
+local neighbor constraints, which keeps the model readable and close to the
+physical interpretation of the task.
+
+The benchmark confirms that the CP-oriented solvers scale well across
+realistic pallet sizes within the 5-minute budget. Larger grippers reduce the
+number of groups to schedule and generally make the instances easier, while
+dense layouts with many small boxes remain the most demanding cases.
+\texttt{gecode} is the most stable solver in these experiments,
+\texttt{cp-sat} and \texttt{chuffed} remain competitive, and \texttt{highs}
+exposes the cost of using a linear representation for this kind of combinatorial
+model. The comparison between wall time and solver-reported time also shows
+that, for very fast runs, MiniZinc flattening and process startup become a
+visible part of the total runtime.
+
+Overall, the adopted formulation is a practical baseline for generating valid
+pick-and-place plans. Possible extensions include adding an objective function,
+for example to minimize placement time or favor smoother robot motions, and
+testing additional search annotations or symmetry-breaking constraints on the
+hardest dense instances.

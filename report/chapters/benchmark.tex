@@ -1,0 +1,196 @@
+\section{Benchmarking}
+\label{sec:benchmark}
+
+\begin{figure}[t]
+  \centering
+  \begin{subfigure}[t]{0.48\linewidth}
+    \includegraphics[width=\linewidth]{figures/scaling_overall_n_boxes_grip1x.pdf}
+    \caption{$k=1$}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.48\linewidth}
+    \includegraphics[width=\linewidth]{figures/scaling_overall_n_boxes_grip2x.pdf}
+    \caption{$k=2$}
+  \end{subfigure}
+
+  \medskip
+
+  \begin{subfigure}[t]{0.48\linewidth}
+    \includegraphics[width=\linewidth]{figures/scaling_overall_n_boxes_grip3x.pdf}
+    \caption{$k=3$}
+  \end{subfigure}
+  \caption{Solve time vs. number of boxes, split by gripper multiplier, with
+  $S = k \cdot \texttt{boxes\_x\_dim}$. The $y$-axis is logarithmic.}
+  \label{fig:scaling-per-grip}
+\end{figure}
+
+The benchmark evaluates the MiniZinc model on every
+\((\text{pallet}, \text{pack}, \text{grip})\) combination defined by the
+benchmark grid. The pallet presets are listed in
+Table~\ref{tab:bench-pallets}, while the pack sizes are listed in
+Table~\ref{tab:bench-packs}.
+
+For each combination, the model is tested with four solvers:
+\texttt{gecode}, \texttt{cp-sat}, \texttt{chuffed}, and \texttt{highs}.
+These solvers represent and solve the problem in different ways.
+\texttt{gecode} and \texttt{chuffed} mainly rely on constraint propagation,
+\texttt{cp-sat} uses a SAT-based Boolean/integer representation, and
+\texttt{highs} uses a linear programming representation. Each run is executed
+with a timeout of 300 seconds.
+
+
+\begin{table}[h]
+  \centering
+
+  \begin{minipage}[t]{0.49\linewidth}
+    \centering
+    \begin{tabularx}{\linewidth}{lX}
+      \toprule
+      \textbf{Pallet preset} & \textbf{Dimensions (mm)} \\
+      \midrule
+      Europallet      & $1200 \times 800$  \\
+      Industrie       & $1200 \times 1000$ \\
+      US 40$\times$48 & $1219 \times 1016$ \\
+      Half-pallet     & $800  \times 600$  \\
+      Australian      & $1165 \times 1165$ \\
+      \addlinespace
+      \bottomrule
+    \end{tabularx}
+    \caption{Pallet presets used in the benchmark.}
+    \label{tab:bench-pallets}
+  \end{minipage}
+  \hfill
+  \begin{minipage}[t]{0.49\linewidth}
+    \centering
+    \begin{tabularx}{0.8\linewidth}{X}
+      \toprule\arraybackslash\textbf{Pack size (mm)} \\
+      \midrule
+      \arraybackslash $50 \times 50$   \\
+      \arraybackslash $70 \times 70$   \\
+      \arraybackslash $100 \times 100$ \\
+      \arraybackslash $120 \times 80$  \\
+      \arraybackslash $150 \times 150$ \\
+      \arraybackslash $200 \times 200$ \\
+      \bottomrule
+    \end{tabularx}
+    \caption{Pack sizes used in the benchmark.}
+    \label{tab:bench-packs}
+  \end{minipage}
+\end{table}
+
+The gripper size is varied as an integer multiple of the box dimension along the
+\(x\)-axis: $S \in \{1,2,3\} \cdot \texttt{boxes\_x\_dim}.$
+This variation is used to study how the gripper size affects the feasibility and
+runtime of the scheduling model.
+
+In the model, this makes \texttt{max\_pkble\_boxes} equal to \(k+1\).
+The three benchmark cases therefore correspond to maximum group lengths of
+two, three, and four boxes along a pallet row.
+
+All timing plots in this section use a logarithmic scale for the time axis.
+This is useful because the benchmark spans several orders of magnitude: some
+\texttt{gecode} runs are solved in milliseconds, while several \texttt{highs}
+runs reach the 300-second timeout. With a linear scale, the fast solvers would
+be compressed near zero and the comparison would be much harder to read.
+
+\subsection{Scaling by gripper size}
+
+The first comparison keeps the gripper multiplier fixed and studies how the
+reported solve time changes with the total number of boxes. This separates the
+three different grouping regimes before aggregating them into a single plot.
+Figure~\ref{fig:scaling-per-grip} shows the resulting scaling curves for
+$k=1$, $k=2$, and $k=3$.
+
+The split shows the expected effect of the gripper size. Larger grippers reduce
+the number of groups that must be scheduled, and the average number of groups
+drops from about $75$ for $k=1$ to about $40$ for $k=3$. As a result, the
+curves generally move downward when the multiplier increases.
+
+\texttt{gecode} stays in the lowest band and is almost flat across the whole
+range. \texttt{cp-sat} scales more visibly with the number of boxes, but still
+remains well below the timeout. \texttt{chuffed} is usually fast, with one
+timeout on the densest $k=1$ instance. \texttt{highs} is consistently the
+slowest solver.
+
+\subsection{Overall solver behaviour}
+
+After separating the grip sizes, the full benchmark can be viewed as one
+aggregate scaling plot. Figure~\ref{fig:scaling-overall} shows solve time with
+respect to the total number of boxes on the pallet for every solver across all
+instances.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.7\linewidth]{figures/scaling_overall_n_boxes.pdf}
+  \caption{Solve time vs. total number of boxes --- all solvers, all
+  instances. The $y$-axis is logarithmic.}
+  \label{fig:scaling-overall}
+\end{figure}
+
+\subsection{Per-pallet breakdown}
+
+Splitting the data by pallet preset, as shown in
+Figure~\ref{fig:scaling-per-pallet}, isolates the effect of pack count from
+pallet shape. For a fixed pallet, the curves are functions of pack count and
+gripper size; differences between pallets reflect the impact of
+\texttt{boxes\_along\_x} and \texttt{boxes\_along\_y} on the number of groups.
+
+The larger pallets expose the same behavior seen in the aggregate plots more
+clearly: dense layouts with many small boxes are the hard cases, while larger
+boxes produce fewer groups and remain easier for all solvers. The log scale is
+especially useful in these plots because it shows the sub-second propagation
+runs and the near-timeout \texttt{highs} runs in the same figure.
+
+\begin{figure}[t]
+  \centering
+  \begin{subfigure}[t]{0.45\linewidth}
+    \includegraphics[width=\linewidth]{figures/scaling_europallet_n_boxes.pdf}
+    \caption{Europallet}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.45\linewidth}
+    \includegraphics[width=\linewidth]{figures/scaling_industrie_n_boxes.pdf}
+    \caption{Industrie}
+  \end{subfigure}
+
+  \medskip
+
+  \begin{subfigure}[t]{0.45\linewidth}
+    \includegraphics[width=\linewidth]{figures/scaling_us_40x48_n_boxes.pdf}
+    \caption{US 40$\times$48}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.45\linewidth}
+    \includegraphics[width=\linewidth]{figures/scaling_halfpallet_n_boxes.pdf}
+    \caption{Half-pallet}
+  \end{subfigure}
+
+  \medskip
+
+  \begin{subfigure}[t]{0.45\linewidth}
+    \includegraphics[width=\linewidth]{figures/scaling_australian_n_boxes.pdf}
+    \caption{Australian}
+  \end{subfigure}
+  \caption{Solve time vs. number of boxes, broken down by pallet preset. The
+  $y$-axis is logarithmic.}
+  \label{fig:scaling-per-pallet}
+\end{figure}
+
+\subsection{Wall time vs.\ solve time}
+
+The gap between Python-measured wall time and solver-reported solve time
+captures MiniZinc flattening and inter-process overhead.
+Figure~\ref{fig:wall-vs-solve} plots the two against each other; points
+above the diagonal indicate runs in which the harness cost dominated the search
+itself. In this plot both axes are logarithmic, so the small overheads of the
+fast runs and the long timeout-scale runs can be compared in the same view.
+
+This distinction is especially visible for the fastest solver runs: their
+reported solve time is very small, so model construction, flattening, and
+process startup become a relevant part of the measured wall time. For the slow
+runs near the timeout, instead, wall time and solve time are much closer.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.75\linewidth]{figures/wall_vs_solve.pdf}
+  \caption{Wall time vs. solve time per run. The diagonal represents
+  zero overhead; both axes are logarithmic.}
+  \label{fig:wall-vs-solve}
+\end{figure}
