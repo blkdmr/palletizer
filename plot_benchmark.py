@@ -1,5 +1,4 @@
 import json
-import math
 from collections import defaultdict
 from pathlib import Path
 
@@ -11,7 +10,7 @@ ROOT_DIR = Path("benchmark")
 INPUT_FILE = ROOT_DIR / "results.json"
 OUTPUT_DIR = ROOT_DIR / Path("plots") 
 
-TIME_FLOOR  = 1e-4  # avoid log(0) for solvers that report solve_time = 0
+TIME_FLOOR  = 1e-4  # safety lower bound for solvers that report solve_time = 0
 
 # Field used as X axis on scaling plots.
 # One of: "n_boxes", "n_groups", "box_x", "box_y"
@@ -31,16 +30,18 @@ def load_results(path):
         if t is None:
             continue
         rows.append({
-            "solver":   r["solver"],
-            "pallet":   r["pallet_preset"],
-            "box":     f"{r['box_x']}x{r['box_y']}",
-            "n_boxes":  r["n_boxes"],
-            "n_groups": r["n_groups"],
-            "box_x":   r["box_x"],
-            "box_y":   r["box_y"],
-            "time":     max(t, TIME_FLOOR),
-            "wall":     r["wall_time"],
-            "status":   r["status"],
+            "solver":         r["solver"],
+            "pallet":         r["pallet_preset"],
+            "box":           f"{r['box_x']}x{r['box_y']}",
+            "n_boxes":        r["n_boxes"],
+            "n_groups":       r["n_groups"],
+            "box_x":          r["box_x"],
+            "box_y":          r["box_y"],
+            "grip_size":      r["grip_size"],
+            "grip_mult":      r.get("grip_multiplier", 3),
+            "time":           max(t, TIME_FLOOR),
+            "wall":           r["wall_time"],
+            "status":         r["status"],
         })
     return data, rows
 
@@ -64,11 +65,8 @@ def plot_scaling_overall(rows, colors, out_path, x_axis):
         ax.plot(xs, ys, "o-", label=solver, color=colors[solver],
                 markersize=5, linewidth=1.4, alpha=0.85)
 
-    ax.set_yscale("log")
     ax.set_xlabel(x_axis)
-    ax.set_ylabel("solve_time (s, log scale)")
-    ax.set_title(f"Solver scaling — solve time vs {x_axis}")
-    ax.grid(True, which="both", alpha=0.3)
+    ax.set_ylabel("solve_time (s)")
     ax.legend()
     plt.tight_layout()
     plt.savefig(out_path, format="pdf", dpi=600)
@@ -92,11 +90,8 @@ def plot_scaling_per_pallet(rows, colors, out_dir, x_axis):
             ys = [p[1] for p in points]
             ax.plot(xs, ys, "o-", label=solver, color=colors[solver],
                     markersize=6, linewidth=1.6, alpha=0.85)
-        ax.set_yscale("log")
         ax.set_xlabel(x_axis)
-        ax.set_ylabel("solve_time (s, log scale)")
-        ax.set_title(f"Solver scaling — {pallet} (x = {x_axis})")
-        ax.grid(True, which="both", alpha=0.3)
+        ax.set_ylabel("solve_time (s)")
         ax.legend()
         plt.tight_layout()
         out_path = out_dir / f"scaling_{pallet}_{x_axis}.pdf"
@@ -107,7 +102,7 @@ def plot_scaling_per_pallet(rows, colors, out_dir, x_axis):
 
 
 def plot_solver_summary(rows, colors, out_path):
-    """Bar chart: geometric mean solve_time per solver, with min/max whiskers."""
+    """Bar chart: mean solve_time per solver, with min/max whiskers."""
     by_solver = defaultdict(list)
     for r in rows:
         by_solver[r["solver"]].append(r["time"])
@@ -118,9 +113,7 @@ def plot_solver_summary(rows, colors, out_path):
     maxs = []
     for s in solvers:
         ts = by_solver[s]
-        # geometric mean is more meaningful on log-distributed timing data
-        log_mean = sum(math.log(t) for t in ts) / len(ts)
-        means.append(math.exp(log_mean))
+        means.append(sum(ts) / len(ts))
         mins.append(min(ts))
         maxs.append(max(ts))
 
@@ -128,20 +121,72 @@ def plot_solver_summary(rows, colors, out_path):
     xs = list(range(len(solvers)))
     bar_colors = [colors[s] for s in solvers]
     ax.bar(xs, means, color=bar_colors, alpha=0.8)
-    # min/max whiskers as vertical lines
     for x, lo, hi in zip(xs, mins, maxs):
         ax.plot([x, x], [lo, hi], color="black", linewidth=1)
         ax.plot([x - 0.1, x + 0.1], [lo, lo], color="black", linewidth=1)
         ax.plot([x - 0.1, x + 0.1], [hi, hi], color="black", linewidth=1)
     ax.set_xticks(xs)
     ax.set_xticklabels(solvers)
-    ax.set_yscale("log")
-    ax.set_ylabel("solve_time (s, log scale)")
-    ax.set_title("Per-solver summary — geometric mean (bar) and min/max (whiskers)")
-    ax.grid(True, axis="y", which="both", alpha=0.3)
+    ax.set_ylabel("solve_time (s)")
     plt.tight_layout()
     plt.savefig(out_path, format="pdf", dpi=600)
     plt.close(fig)
+
+
+def plot_scaling_by_grip(rows, colors, out_path):
+    """Mean solve_time vs grip multiplier, one line per solver."""
+    by_solver_grip = defaultdict(list)
+    for r in rows:
+        by_solver_grip[(r["solver"], r["grip_mult"])].append(r["time"])
+
+    fig, ax = plt.subplots(figsize=(8, 5.5))
+    solvers = sorted({s for (s, _) in by_solver_grip})
+    for solver in solvers:
+        grips = sorted({g for (s, g) in by_solver_grip if s == solver})
+        xs, ys = [], []
+        for g in grips:
+            ts = by_solver_grip[(solver, g)]
+            xs.append(g)
+            ys.append(sum(ts) / len(ts))
+        ax.plot(xs, ys, "o-", label=solver, color=colors[solver],
+                markersize=6, linewidth=1.6, alpha=0.85)
+
+    ax.set_xlabel(r"grip multiplier $k$ (grip_size = $k \cdot$ boxes_x_dim)")
+    ax.set_ylabel("solve_time (s, mean)")
+    ax.set_xticks(sorted({r["grip_mult"] for r in rows}))
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig(out_path, format="pdf", dpi=600)
+    plt.close(fig)
+
+
+def plot_scaling_overall_per_grip(rows, colors, out_dir, x_axis):
+    """One file per grip multiplier: solve_time vs <x_axis>, lines per solver."""
+    grips = sorted({r["grip_mult"] for r in rows})
+    written = []
+    for g in grips:
+        sub = [r for r in rows if r["grip_mult"] == g]
+        if not sub:
+            continue
+        fig, ax = plt.subplots(figsize=(9, 5.5))
+        by_solver = defaultdict(list)
+        for r in sub:
+            by_solver[r["solver"]].append((r[x_axis], r["time"]))
+        for solver, points in sorted(by_solver.items()):
+            points.sort()
+            xs = [p[0] for p in points]
+            ys = [p[1] for p in points]
+            ax.plot(xs, ys, "o-", label=solver, color=colors[solver],
+                    markersize=5, linewidth=1.4, alpha=0.85)
+        ax.set_xlabel(x_axis)
+        ax.set_ylabel("solve_time (s)")
+        ax.legend()
+        plt.tight_layout()
+        out_path = out_dir / f"scaling_overall_{x_axis}_grip{g}x.pdf"
+        plt.savefig(out_path, format="pdf", dpi=600)
+        plt.close(fig)
+        written.append(out_path)
+    return written
 
 
 def plot_wall_vs_solve(rows, colors, out_path):
@@ -156,14 +201,13 @@ def plot_wall_vs_solve(rows, colors, out_path):
         ys = [p[1] for p in pts]
         ax.scatter(xs, ys, label=solver, color=colors[solver], s=30, alpha=0.75, edgecolor="black", linewidth=0.3)
 
-    lim_lo = TIME_FLOOR
-    lim_hi = max(max(r["wall"] for r in rows), max(r["time"] for r in rows)) * 1.2
+    lim_lo = 0.0
+    lim_hi = max(max(r["wall"] for r in rows), max(r["time"] for r in rows)) * 1.05
     ax.plot([lim_lo, lim_hi], [lim_lo, lim_hi], "k--", alpha=0.4, label="y = x")
-    ax.set_xscale("log"); ax.set_yscale("log")
+    ax.set_xlim(lim_lo, lim_hi)
+    ax.set_ylim(lim_lo, lim_hi)
     ax.set_xlabel("solve_time (s)")
     ax.set_ylabel("wall_time (s)")
-    ax.set_title("Wall time vs solve time — gap = MiniZinc flattening + IPC overhead")
-    ax.grid(True, which="both", alpha=0.3)
     ax.legend()
     plt.tight_layout()
     plt.savefig(out_path, format="pdf", dpi=600)
@@ -192,8 +236,10 @@ def main():
     per_pallet = plot_scaling_per_pallet(rows, colors, OUTPUT_DIR, X_AXIS)
     plot_solver_summary    (rows, colors, OUTPUT_DIR / "solver_summary.pdf")
     plot_wall_vs_solve     (rows, colors, OUTPUT_DIR / "wall_vs_solve.pdf")
+    plot_scaling_by_grip   (rows, colors, OUTPUT_DIR / "scaling_by_grip.pdf")
+    per_grip = plot_scaling_overall_per_grip(rows, colors, OUTPUT_DIR, X_AXIS)
 
-    print(f"Wrote {3 + len(per_pallet)} plots to {OUTPUT_DIR.resolve()}")
+    print(f"Wrote {4 + len(per_pallet) + len(per_grip)} plots to {OUTPUT_DIR.resolve()}")
 
 
 if __name__ == "__main__":

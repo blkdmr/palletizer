@@ -25,6 +25,8 @@ BOX_SIZES = [
     (200, 200),
 ]
 
+GRIP_MULTIPLIERS = [1, 2, 3]  # grip_size = k * boxes_x_dim, with k in [1, 3]
+
 SOLVERS = ["gecode", "chuffed",  "cp-sat", "highs"]
 
 TIMEOUT_SECONDS = 300 # 5 minutes timeout
@@ -40,10 +42,10 @@ def available_solvers(names):
     return found
 
 
-def run_one(model, solver_name, box_x, box_y, pallet_x, pallet_y, timeout_s):
+def run_one(model, solver_name, box_x, box_y, pallet_x, pallet_y, grip_multiplier, timeout_s):
     pallet_info = gen_pallet_info(box_x, box_y, pallet_x, pallet_y)
     boxes_x_dim = box_x if not pallet_info["rotated"] else box_y
-    grip_size = 3 * boxes_x_dim
+    grip_size = grip_multiplier * boxes_x_dim
 
     solver = Solver.lookup(solver_name)
     instance = Instance(solver, model)
@@ -68,6 +70,7 @@ def run_one(model, solver_name, box_x, box_y, pallet_x, pallet_y, timeout_s):
         "boxes_along_x":  pallet_info["boxes_along_x"],
         "boxes_along_y":  pallet_info["boxes_along_y"],
         "grip_size":      grip_size,
+        "grip_multiplier": grip_multiplier,
         "timeout_s":      timeout_s,
     }
 
@@ -104,17 +107,18 @@ def main():
     print(f"Running solvers: {solvers}")
 
     results = []
-    total = len(PALLET_PRESETS) * len(BOX_SIZES) * len(solvers)
+    total = len(PALLET_PRESETS) * len(BOX_SIZES) * len(GRIP_MULTIPLIERS) * len(solvers)
     i = 0
     for pallet_name, (pallet_x, pallet_y) in PALLET_PRESETS.items():
         for (box_x, box_y) in BOX_SIZES:
-            for solver_name in solvers:
-                i += 1
-                print(f"[{i}/{total}] {solver_name} | {pallet_name} {pallet_x}x{pallet_y} | box {box_x}x{box_y}")
-                rec = run_one(model, solver_name, box_x, box_y, pallet_x, pallet_y, TIMEOUT_SECONDS)
-                rec["pallet_preset"] = pallet_name
-                print(f"   → status={rec['status']} wall={rec['wall_time']:.3f}s n_boxes={rec['n_boxes']} n_groups={rec['n_groups']}")
-                results.append(rec)
+            for grip_mult in GRIP_MULTIPLIERS:
+                for solver_name in solvers:
+                    i += 1
+                    print(f"[{i}/{total}] {solver_name} | {pallet_name} {pallet_x}x{pallet_y} | box {box_x}x{box_y} | grip x{grip_mult}")
+                    rec = run_one(model, solver_name, box_x, box_y, pallet_x, pallet_y, grip_mult, TIMEOUT_SECONDS)
+                    rec["pallet_preset"] = pallet_name
+                    print(f"   → status={rec['status']} wall={rec['wall_time']:.3f}s n_boxes={rec['n_boxes']} n_groups={rec['n_groups']}")
+                    results.append(rec)
 
     out = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
@@ -122,6 +126,7 @@ def main():
         "solvers":      solvers,
         "pallet_presets": {k: {"x": v[0], "y": v[1]} for k, v in PALLET_PRESETS.items()},
         "box_sizes":   [{"x": x, "y": y} for (x, y) in BOX_SIZES],
+        "grip_multipliers": GRIP_MULTIPLIERS,
         "results":      results,
     }
 

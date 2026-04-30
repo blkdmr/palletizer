@@ -490,39 +490,39 @@ pick-and-place plan.
 \end{figure}
 
 % =============================================================================
-\section{Driving the model from Python}
+\section{Calling the model from Python}
 \label{sec:python}
 
-The Python layer is intentionally thin --- it is a wrapper around
-\texttt{minizinc-python} that handles the geometry computations the model
-deliberately leaves out, and produces visual artifacts of solutions. Three
-scripts compose the pipeline:
+Some small Python scripts are built around the MiniZinc model, which
+il loaded through \texttt{minizinc-python} and attached
+to the Gecode solver:
 
-\begin{description}
-  \item[\texttt{sample.py}] Solves a single instance and renders the
-        layout and a step-by-step drop schedule as PDFs. The Python side
-        is responsible for picking the orientation that fits more boxes
-        on the pallet (\texttt{lib/utils.py}: \texttt{gen\_pallet\_info}),
-        deriving \texttt{boxes\_x\_dim} and the gripper size $S = 3x$,
-        and translating the model output (the four arrays
-        \texttt{group\_start}, \texttt{group\_len}, \texttt{drop\_order},
-        \texttt{plate}) into a high-level \emph{schedule} of drop
-        actions.
-  \item[\texttt{benchmark.py}] Runs the same model across the cartesian
-        product of five pallet presets and six pack sizes, against every
-        available solver, with a 5-minute timeout. Each run is
-        encapsulated and timing/error information is recorded in a
-        single \texttt{benchmark/results.json} file.
-  \item[\texttt{plot\_benchmark.py}] Consumes the JSON benchmark and
-        produces the comparison plots referenced in
-        Section~\ref{sec:benchmark}.
-\end{description}
+\vspace{0.5cm}
+\begin{lstlisting}[language=Python]
+model    = Model("model.mzn")
+solver   = Solver.lookup("gecode")
+instance = Instance(solver, model)
+\end{lstlisting}
+\vspace{0.5cm}
 
-The renderer in \texttt{lib/visualize.py} is orientation-agnostic: it
-consumes already-rotated cell dimensions (\texttt{cell\_w}, \texttt{cell\_h})
-and the four solution arrays, and outputs both an overall pallet figure
-(colored by group) and one figure per drop step (with an arrow showing the
-opening plate side).
+The Python scripts assigns concrete values to the MiniZinc parameters
+and starts the solve:
+
+\vspace{0.5cm}
+\begin{lstlisting}[language=Python]
+instance["n_boxes"]       = pallet_info["n_boxes"]
+instance["boxes_x_dim"]   = boxes_x_dim
+instance["boxes_along_x"] = pallet_info["boxes_along_x"]
+instance["boxes_along_y"] = pallet_info["boxes_along_y"]
+instance["grip_size"]     = grip_size
+
+result = instance.solve()
+\end{lstlisting}
+\vspace{0.5cm}
+
+After solving, Python read the MiniZinc output arrays
+\texttt{group\_start}, \texttt{group\_len}, \texttt{drop\_order}, and
+\texttt{plate} to get the pallet layout and schedule.
 
 %\subsection{Worked example}
 %\label{sec:example}
@@ -552,12 +552,11 @@ opening plate side).
 \section{Benchmarking}
 \label{sec:benchmark}
 
-\subsection{Setup}
-
 The benchmark runs the MiniZinc model on every $(\text{pallet},
-\text{pack})$ combination from the lists in \texttt{benchmark.py} (see
-Table~\ref{tab:bench-grid}), against every solver registered with the
-local MiniZinc installation, with a per-run timeout of 300 seconds.
+\text{pack}, \text{grip})$ combination from the lists in Table~\ref{tab:bench-grid},
+against diffenrent solvers ("gecode", "cp-sat", "chuffed" and "highs", that uses
+different representation for the CSP problem, namely ..., with a per-run
+timeout of 300 seconds.
 
 \begin{table}[h]
   \centering
@@ -585,32 +584,42 @@ local MiniZinc installation, with a per-run timeout of 300 seconds.
     $200 \times 200$ \\
     \bottomrule
   \end{tabular}
-  \caption{Pallet presets and pack sizes used in the benchmark.}
+  \quad
+  \begin{tabular}{l}
+    \toprule
+    \textbf{Grip multiplier} \\
+    \midrule
+    $1 \cdot \texttt{boxes\_x\_dim}$ \\
+    $2 \cdot \texttt{boxes\_x\_dim}$ \\
+    $3 \cdot \texttt{boxes\_x\_dim}$ \\
+    \bottomrule
+  \end{tabular}
+  \caption{Pallet presets, pack sizes, and gripper sizes used in the
+  benchmark.}
   \label{tab:bench-grid}
 \end{table}
 
-The gripper size is fixed at $S = 3 \cdot \texttt{boxes\_x\_dim}$, the
-maximum allowed by the project specification.
+The gripper size is varied across the integer multiples
+$S \in \{1,2,3\} \cdot \texttt{boxes\_x\_dim}$, in order to
+study the effect of the gripper size.
 
-\subsection{Overall scaling}
-
-Figure~\ref{fig:scaling-overall} shows solve time as a function of the
-total number of boxes on the pallet, on a logarithmic axis, for every
-solver across all instances. The geometric mean and min/max range per
-solver is summarised in Figure~\ref{fig:solver-summary}.
+Figure~\ref{fig:scaling-overall} shows solve time with respect to the
+total number of boxes on the pallet for every solver across all
+instances. The arithmetic mean and min/max range per solver is
+summarised in Figure~\ref{fig:solver-summary}.
 
 \begin{figure}[h]
   \centering
   \includegraphics[width=0.85\linewidth]{images/scaling_overall_n_boxes.pdf}
   \caption{Solve time vs. total number of boxes --- all solvers, all
-  instances. Log scale on the time axis.}
+  instances.}
   \label{fig:scaling-overall}
 \end{figure}
 
 \begin{figure}[h]
   \centering
   \includegraphics[width=0.7\linewidth]{images/solver_summary.pdf}
-  \caption{Per-solver geometric mean of solve time (bar) with min/max
+  \caption{Per-solver mean of solve time (bar) with min/max
   whiskers across the full benchmark set.}
   \label{fig:solver-summary}
 \end{figure}
@@ -655,6 +664,25 @@ pallets reflect the impact of \texttt{boxes\_along\_x} and
   \label{fig:scaling-per-pallet}
 \end{figure}
 
+\subsection{Effect of gripper size}
+
+Sweeping the gripper multiplier $k \in \{1,2,3\}$ changes
+\texttt{max\_pkble\_boxes} and therefore the total number of groups for a
+given pallet/pack pair. Smaller grippers force more groups per row,
+which tightens the partition but lengthens the schedule; larger
+grippers reduce the number of groups but loosen the row-partition
+constraint. Figure~\ref{fig:scaling-by-grip} reports the mean of solve
+time as a function of $k$, with one line per solver.
+
+%\begin{figure}[h]
+%  \centering
+%  \includegraphics[width=0.7\linewidth]{images/scaling_by_grip.pdf}
+%  \caption{Mean of solve time vs.\ gripper multiplier $k$, with
+%  $S = k \cdot \texttt{boxes\_x\_dim}$, aggregated across all
+%  pallet/pack instances.}
+%  \label{fig:scaling-by-grip}
+%\end{figure}
+
 \subsection{Wall time vs.\ solve time}
 
 The gap between Python-measured wall time and solver-reported solve time
@@ -666,8 +694,8 @@ search itself.
 \begin{figure}[h]
   \centering
   \includegraphics[width=0.7\linewidth]{images/wall_vs_solve.pdf}
-  \caption{Wall time vs. solve time per run, log--log. The diagonal
-  represents zero overhead; all points lie above it.}
+  \caption{Wall time vs. solve time per run. The diagonal represents
+  zero overhead; all points lie above it.}
   \label{fig:wall-vs-solve}
 \end{figure}
 
