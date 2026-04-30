@@ -3,14 +3,13 @@
 This part of the model admits several possible encodings. A natural but
 expensive formulation is a \emph{fully enumerated} encoding, where each group
 explicitly stores the identifiers of all boxes it contains. Since groups may
-have different lengths, this representation usually requires a two-dimensional
+have different lengths, this representation requires a two-dimensional
 array with padding values for shorter groups.
 \vspace{0.5cm}
 \begin{lstlisting}
 array[1..n_groups, 1..max_pkble_packs] of var 0..n_packs: groups;
 \end{lstlisting}
 \vspace{0.5cm}
-
 Here, the value \(0\) is used as a dummy value to represent an empty slot.
 This representation makes group membership explicit and easy to inspect.
 However, it introduces a large number of decision variables and requires
@@ -19,30 +18,7 @@ particular, the model must ensure that each box appears exactly once, that
 non-empty positions inside each group are ordered, and that the groups are
 consistent with the geometric ordering of the layer.
 
-%\vspace{0.5cm}
-%\begin{lstlisting}
-%% Each pack identifier 1..n_packs appears exactly once.
-%constraint
-%  forall(v in 1..n_packs) (
-%    count(array1d(groups), v) = 1
-%  );
-%
-%% Non-empty entries are placed before padding values.
-%constraint
-%  forall(g in 1..n_groups, j in 1..max_pkble_packs-1) (
-%    groups[g,j] = 0 -> groups[g,j+1] = 0
-%  );
-%
-%% Pack identifiers are strictly increasing inside each group.
-%constraint
-%  forall(g in 1..n_groups, j in 1..max_pkble_packs-1) (
-%    groups[g,j] != 0 /\ groups[g,j+1] != 0 ->
-%      groups[g,j] < groups[g,j+1]
-%  );
-%\end{lstlisting}
-%\vspace{0.5cm}
-
-A second possibility is a \emph{binary assignment} encoding, where a Boolean
+A second possibility is a \emph{binary assignment} encoding, where a boolean
 variable states whether pack \(i\) belongs to group \(g\). This representation
 can be written as follows:
 
@@ -51,12 +27,11 @@ can be written as follows:
 array[1..n_groups, 1..n_packs] of var bool: belongs_to_group;
 \end{lstlisting}
 \vspace{0.5cm}
-
 In this case, group membership is represented by the truth value of
 \texttt{belongs\_to\_group[g,i]}. Although this encoding is expressive, it is
 even larger than the fully enumerated representation. It also does not encode
 contiguity or same-row membership directly. These properties must be
-reconstructed through additional channeling constraints.
+reconstructed through additional constraints.
 
 For this reason, the adopted model represents each group using its
 \emph{start index} and \emph{length}. An equivalent formulation could use the
@@ -74,7 +49,6 @@ array[1..n_groups] of var 1..n_packs: group_start;
 array[1..n_groups] of var 1..max_pkble_packs: group_len;
 \end{lstlisting}
 \vspace{0.5cm}
-
 The adopted encoding uses two arrays: \texttt{group\_start}, which stores the
 first box of each group, and \texttt{group\_len}, which stores the number of
 boxes in that group.
@@ -95,16 +69,23 @@ constraint forall(g in 1..n_groups)(
 );
 \end{lstlisting}
 \vspace{0.5cm}
+The first three constraints define the groups as consecutive intervals. The
+first group starts from pack \(1\), and each following group starts immediately
+after the last pack of the previous group. In particular, the third constraint
+forces the last group to end at pack \(n\). Together, these conditions ensure
+that all packs are covered exactly once, without gaps or overlaps.
 
-The first three constraints define the groups as consecutive intervals over
-the row-major ordering of the packs. The first group starts from pack \(1\),
-and each following group starts immediately after the last pack of the previous
-group. The final constraint in this block forces the last group to end at pack
-\(n\). Together, these conditions ensure that all packs are covered exactly
-once, without gaps or overlaps.
+The fourth constraint enforces the geometric feasibility of each group: a group cannot
+cross from one row to the next. The constraint compares the row index of the
+first pack with the row index of the last pack in the group. If the two indices
+are equal, the whole interval lies on the same row.
 
-The fourth constraint enforces the geometric feasibility of each group. Since
-the gripper can only pick boxes aligned along the \(x\)-axis, a group cannot
-cross from one row to the next. The constraint therefore compares the row index
-of the first pack in the group with the row index of the last pack. If the two
-indices are equal, the whole interval lies on the same row.
+An example of the result of the grouping phase is shown in Figure~\ref{fig:sample-pallet}.
+\begin{figure}[t!]
+  \centering
+  \includegraphics[width=0.65\linewidth]{figures/sample_pallet.pdf}
+  \caption{Pallet layout produced by the grouping stage: 51 groups
+  tiling the $11 \times 17$ grid, each colored
+  distinctly. Groups alternate $3$--$4$--$4$ across each row.}
+  \label{fig:sample-pallet}
+\end{figure}
