@@ -56,8 +56,8 @@
   xleftmargin=10pt
 }
 
-\title{Robot Movement Planning\\\large A Constraint Programming approach to gripper-aware depalletizing}
-\author{Alessio Russo}
+\title{Robot Movement Planning\\\large Constraint Programming Project Report}
+\author{Alessio Russo (mat. 376856)}
 \date{}
 
 \begin{document}
@@ -82,33 +82,24 @@ of boxes equal to
     \left\lfloor \frac{S+x}{x} \right\rfloor .
 \]
 This formulation accounts for a maximum admissible overflow of \(x/2\) on each
-side of the gripper. Figure~\ref{fig:pick-example} shows an example of the
-picking operation.
+side of the gripper.
 
 \begin{figure}[h]
     \centering
-    \includegraphics[width=0.75\textwidth]{images/pick.png}
-    \caption{Example of a picking operation from the input stream.}
-    \label{fig:pick-example}
+    \includegraphics[width=0.8\textwidth]{images/pick_and_release.pdf}
+    \caption{Example of a picking and releasing operations.}
+    \label{fig:pick_and_release_example}
 \end{figure}
 
 At each release operation, only one gripper plate can open. Therefore, the
 opening side must face a free direction, either the external boundary of the
-layer or a grid position that has not yet been filled. Figure~\ref{fig:drop-example}
-shows an example of this release constraint. This constraint couples the
+layer or a grid position that has not yet been filled. This constraint couples the
 geometric construction of groups with the temporal order in which they are
 released.
 
-\begin{figure}[h]
-    \centering
-    \includegraphics[width=0.7\textwidth]{images/drop.png}
-    \caption{Example of a release operation. Since only one gripper plate can
-    open at a time, the opening side must face either the boundary of the layer
-    or a position that has not yet been filled.}
-    \label{fig:drop-example}
-\end{figure}
-
-The problem can therefore be decomposed into two related subproblems:
+Figure~\ref{fig:pick_and_release_example} shows an example of the
+picking and releasing operations. The problem can therefore be decomposed
+into two related subproblems:
 
 \begin{enumerate}[label=(\Alph*)]
   \item \textbf{Grouping.} Partition the \(n\) boxes into groups that are
@@ -136,7 +127,7 @@ parameters:
   \item the gripper size \(S\), denoted by \texttt{grip\_size}.
 \end{itemize}
 
-These parameters are declared in MiniZinc as follows:
+These parameters are declared as follows:
 \vspace{0.5cm}
 \begin{lstlisting}
 par int: n_boxes;
@@ -177,8 +168,7 @@ groups per row by the number of rows:
     \texttt{groups\_per\_row}.
 \]
 
-\newpage
-The corresponding MiniZinc declarations are:
+The corresponding declarations are:
 \vspace{0.5cm}
 \begin{lstlisting}
 par int: max_pkble_boxes = (grip_size + boxes_x_dim) div boxes_x_dim;
@@ -191,7 +181,7 @@ par int: n_groups = boxes_along_y * groups_per_row;
 % =============================================================================
 \section{Grouping}
 \label{sec:model}
-This part of the model admits several possible CP encodings. A natural but
+This part of the model admits several possible encodings. A natural but
 expensive formulation is a \emph{fully enumerated} encoding, where each group
 explicitly stores the identifiers of all boxes it contains. Since groups may
 have different lengths, this representation usually requires a two-dimensional
@@ -210,28 +200,28 @@ particular, the model must ensure that each box appears exactly once, that
 non-empty positions inside each group are ordered, and that the groups are
 consistent with the geometric ordering of the layer.
 
-\vspace{0.5cm}
-\begin{lstlisting}
-% Each pack identifier 1..n_packs appears exactly once.
-constraint
-  forall(v in 1..n_packs) (
-    count(array1d(groups), v) = 1
-  );
-
-% Non-empty entries are placed before padding values.
-constraint
-  forall(g in 1..n_groups, j in 1..max_pkble_packs-1) (
-    groups[g,j] = 0 -> groups[g,j+1] = 0
-  );
-
-% Pack identifiers are strictly increasing inside each group.
-constraint
-  forall(g in 1..n_groups, j in 1..max_pkble_packs-1) (
-    groups[g,j] != 0 /\ groups[g,j+1] != 0 ->
-      groups[g,j] < groups[g,j+1]
-  );
-\end{lstlisting}
-\vspace{0.5cm}
+%\vspace{0.5cm}
+%\begin{lstlisting}
+%% Each pack identifier 1..n_packs appears exactly once.
+%constraint
+%  forall(v in 1..n_packs) (
+%    count(array1d(groups), v) = 1
+%  );
+%
+%% Non-empty entries are placed before padding values.
+%constraint
+%  forall(g in 1..n_groups, j in 1..max_pkble_packs-1) (
+%    groups[g,j] = 0 -> groups[g,j+1] = 0
+%  );
+%
+%% Pack identifiers are strictly increasing inside each group.
+%constraint
+%  forall(g in 1..n_groups, j in 1..max_pkble_packs-1) (
+%    groups[g,j] != 0 /\ groups[g,j+1] != 0 ->
+%      groups[g,j] < groups[g,j+1]
+%  );
+%\end{lstlisting}
+%\vspace{0.5cm}
 
 A second possibility is a \emph{binary assignment} encoding, where a Boolean
 variable states whether pack \(i\) belongs to group \(g\). This representation
@@ -300,46 +290,36 @@ cross from one row to the next. The constraint therefore compares the row index
 of the first pack in the group with the row index of the last pack. If the two
 indices are equal, the whole interval lies on the same row.
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Scheduling}
 
-Once the grouping stage has fixed the horizontal intervals, the second part of
-the model decides when each group is released and which gripper plate opens.
-As in the grouping stage, several encodings are possible. A direct
-time-expanded formulation would introduce a Boolean variable for every pair
-of group and time step, stating whether a group has already been placed at a
-given moment.
+\begin{figure}[t!]
+  \centering
+  \includegraphics[width=0.65\linewidth]{images/sample_pallet.pdf}
+  \caption{Pallet layout produced by the grouping stage: 51 groups
+  tiling the $11 \times 17$ grid, each colored
+  distinctly. Groups alternate $3$--$4$--$4$ across each row.}
+  \label{fig:sample-pallet}
+\end{figure}
 
-\vspace{0.5cm}
-\begin{lstlisting}
-array[1..n_groups, 1..n_groups] of var bool: already_placed;
-array[1..n_groups] of var 0..1: plate;
-\end{lstlisting}
-\vspace{0.5cm}
-
-This representation makes the state of the pallet explicit at every step.
-However, it is unnecessarily large for this problem. It also requires
-additional channeling constraints to ensure that each group appears at exactly
-one time step and that the Boolean occupancy matrix is consistent with the
-chosen order.
-
-The adopted model instead represents the schedule by assigning a single
-integer position to each group. The array \texttt{drop\_order} stores the
-time step at which group \(g\) is released, while \texttt{plate} stores the
-opening side used for that release. The value \(0\) denotes the left plate and
-the value \(1\) denotes the right plate.
+The second part of the model determines the release order of the groups and
+selects which gripper plate opens for each release. In this case, the most
+direct representation consists in assigning to each group a single release
+position. The array \texttt{drop\_order} stores the time step at which each
+group is released, while \texttt{plate} stores the plate opened for that release.
+The value \(0\) denotes the left plate, and the value \(1\) denotes the right
+plate.
 
 \vspace{0.5cm}
 \begin{lstlisting}
 array[1..n_groups] of var 1..n_groups: drop_order;
-array[1..n_groups] of var 0..1:        plate;
+array[1..n_groups] of var 0..1: plate;
 \end{lstlisting}
 \vspace{0.5cm}
 
-The only global constraint needed to make \texttt{drop\_order} a valid
-schedule is \texttt{alldifferent}. Since every value belongs to the domain
-\(1,\dots,\texttt{n\_groups}\), enforcing pairwise difference means that each
-release step is used exactly once.
+The only global constraint required to make \texttt{drop\_order} a valid
+schedule is \texttt{alldifferent}. Since every value in \texttt{drop\_order}
+belongs to the domain \(1,\dots,\texttt{n\_groups}\), forcing all values to be
+different ensures that each release step is assigned to exactly one group.
 
 \vspace{0.5cm}
 \begin{lstlisting}
@@ -347,65 +327,135 @@ constraint alldifferent(drop_order);
 \end{lstlisting}
 \vspace{0.5cm}
 
-The release feasibility constraint depends on the horizontal neighbors of each
-group. These neighbors do not need to be decision variables. The grouping
-constraints force every row to contain exactly \texttt{groups\_per\_row}
-groups, numbered consecutively in row-major order. Therefore, the position of
-group \(g\) inside its row is given by
-\((g-1) \bmod \texttt{groups\_per\_row}\), and its left and right neighbors
-can be computed directly from the group index. The sentinel value \(0\) is
-used when a group lies on the boundary of a row.
+The feasibility of a release depends on the position of the adjacent groups in the same
+vertical column. As shown in Figure~\ref{fig:sample-pallet}, groups are
+numbered from left to right within each row, and then from top to
+bottom across rows.
+Therefore, since each row contains \texttt{groups\_per\_row} groups,
+two groups that are aligned in consecutive rows have indices
+that differ by \texttt{groups\_per\_row}. For a generic group \(g\),
+the vertical neighborhood is therefore given by 
+$g \pm \texttt{groups\_per\_row},$ whenever these indices are within the valid range.
+Groups in the first pallet row have no upper neighbor,
+while groups in the last pallet row have no lower neighbor.
+
+The final constraint encodes the physical restriction on the gripper plates:
+when a group is released, the selected plate must open toward a free direction.
+A direction is free if the group lies on the corresponding pallet boundary, or
+if the group in that direction is scheduled to be released later and is
+therefore still absent from the pallet at the current release step.
+
+Since the relevant neighbors are above and below the current group, the
+constraint is written by separating the first row, the internal rows, and the
+last row. This avoids invalid array accesses at the pallet boundaries.
 
 \vspace{0.5cm}
 \begin{lstlisting}
-array[1..n_groups] of par int: left_neighbor =
-  [ if (g - 1) mod groups_per_row > 0
-    then g - 1
-    else 0
-    endif
-  | g in 1..n_groups ];
+constraint forall(g in 1..n_groups where g <= groups_per_row)(
+  plate[g] = 0 \/
+  (
+    plate[g] = 1 /\
+    drop_order[g + groups_per_row] > drop_order[g]
+  )
+);
 
-array[1..n_groups] of par int: right_neighbor =
-  [ if (g - 1) mod groups_per_row < groups_per_row - 1
-    then g + 1
-    else 0
-    endif
-  | g in 1..n_groups ];
-\end{lstlisting}
-\vspace{0.5cm}
-
-Declaring these arrays as \texttt{par} rather than \texttt{var} keeps the
-neighbor structure outside the search space. The solver therefore searches
-only over the ordering of the groups and the plate side assigned to each
-release.
-
-The final constraint encodes the physical restriction that, when a group is
-released, the opening plate must face a free direction. A direction is free if
-the corresponding neighbor does not exist, meaning the group is on the
-external boundary of the row, or if that neighbor is scheduled later and is
-therefore still empty at the current release step.
-
-\vspace{0.5cm}
-\begin{lstlisting}
-constraint forall(g in 1..n_groups)(
-  (plate[g] = 0 /\
-    (left_neighbor[g]  = 0 \/
-     drop_order[left_neighbor[g]]  > drop_order[g]))
+constraint forall(g in 1..n_groups where
+  g > groups_per_row /\ g <= n_groups - groups_per_row
+)(
+  (
+    plate[g] = 0 /\
+    drop_order[g - groups_per_row] > drop_order[g]
+  )
   \/
-  (plate[g] = 1 /\
-    (right_neighbor[g] = 0 \/
-     drop_order[right_neighbor[g]] > drop_order[g]))
+  (
+    plate[g] = 1 /\
+    drop_order[g + groups_per_row] > drop_order[g]
+  )
+);
+
+constraint forall(g in 1..n_groups where g > n_groups - groups_per_row)(
+  (
+    plate[g] = 0 /\
+    drop_order[g - groups_per_row] > drop_order[g]
+  )
+  \/
+  plate[g] = 1
 );
 \end{lstlisting}
 \vspace{0.5cm}
 
-For each group \(g\), the first branch of the disjunction corresponds to
-opening the left plate. This is feasible only if there is no left neighbor, or
-if the left neighbor has a larger \texttt{drop\_order} value than \(g\). The
-second branch applies the same reasoning to the right plate. In this way, the
-constraint couples the two scheduling decisions: once the plate side is fixed,
-the model also fixes which neighboring group must be absent at the time of
-release.
+The first constraint handles groups in the first pallet row. These groups have
+no upper neighbor, so opening plate \(0\) is always feasible. Opening plate
+\(1\), instead, is feasible only if the lower neighbor is released later.
+
+The second constraint handles the internal rows. In this case, both vertical
+neighbors exist. Opening plate \(0\) is feasible only if the upper neighbor
+\(g-\texttt{groups\_per\_row}\) is released later. Similarly, opening plate
+\(1\) is feasible only if the lower neighbor
+\(g+\texttt{groups\_per\_row}\) is released later.
+
+The third constraint handles groups in the last pallet row. These groups have
+no lower neighbor, so opening plate \(1\) is always feasible. Opening plate
+\(0\) is feasible only if the upper neighbor is released later.
+
+%An equivalent and more compact formulation is to precompute the vertical
+%neighborhood using parameter arrays \texttt{upper\_neighbor} and
+%\texttt{lower\_neighbor}. The sentinel value \(0\) denotes the absence of a
+%neighbor at a pallet boundary.
+%
+%\vspace{0.5cm}
+%\begin{lstlisting}
+%array[1..n_groups] of par int: upper_neighbor =
+%  [ if g > groups_per_row
+%    then g - groups_per_row
+%    else 0
+%    endif
+%  | g in 1..n_groups ];
+%
+%array[1..n_groups] of par int: lower_neighbor =
+%  [ if g <= n_groups - groups_per_row
+%    then g + groups_per_row
+%    else 0
+%    endif
+%  | g in 1..n_groups ];
+%\end{lstlisting}
+%\vspace{0.5cm}
+%
+%Using these arrays, the release constraint can be written more compactly. A
+%group can open plate \(0\) if it has no upper neighbor, or if its upper neighbor
+%is released later. The same condition applies symmetrically to plate \(1\) and
+%the lower neighbor.
+%
+%\vspace{0.5cm}
+%\begin{lstlisting}
+%constraint forall(g in 1..n_groups)(
+%  (
+%    plate[g] = 0 /\
+%    if upper_neighbor[g] = 0 then
+%      true
+%    else
+%      drop_order[upper_neighbor[g]] > drop_order[g]
+%    endif
+%  )
+%  \/
+%  (
+%    plate[g] = 1 /\
+%    if lower_neighbor[g] = 0 then
+%      true
+%    else
+%      drop_order[lower_neighbor[g]] > drop_order[g]
+%    endif
+%  )
+%);
+%\end{lstlisting}
+%\vspace{0.5cm}
+%
+%This formulation expresses the same release rule as the row-separated version,
+%but separates the neighborhood computation from the scheduling condition. It
+%also makes the constraint shorter and easier to inspect. The explicit
+%row-separated formulation is preferable when avoiding conditional expressions,
+%whereas the neighbor-array formulation provides a more compact representation
+%of the same logic.
 
 The model is a pure feasibility problem:
 
@@ -415,9 +465,29 @@ solve satisfy;
 \end{lstlisting}
 \vspace{0.5cm}
 
-No objective function is required, since any assignment of
-\texttt{drop\_order} and \texttt{plate} that satisfies the neighbor constraint
-is a valid pick-and-place plan.
+No objective function is required. Any assignment of \texttt{drop\_order} and
+\texttt{plate} that satisfies the vertical-neighbor constraint defines a valid
+pick-and-place plan.
+
+\begin{figure}[h]
+  \centering
+  \begin{subfigure}[t]{0.24\linewidth}
+    \includegraphics[width=\linewidth]{images/scheduling/schedule_step_01.pdf}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.24\linewidth}
+    \includegraphics[width=\linewidth]{images/scheduling/schedule_step_10.pdf}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.24\linewidth}
+    \includegraphics[width=\linewidth]{images/scheduling/schedule_step_25.pdf}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.24\linewidth}
+    \includegraphics[width=\linewidth]{images/scheduling/schedule_step_50.pdf}
+  \end{subfigure}
+  \caption{Example of a scheduling. The red
+  border marks the group being placed; the blue arrow shows the
+  opening plate side.}
+  \label{fig:sample-schedule}
+\end{figure}
 
 % =============================================================================
 \section{Driving the model from Python}
@@ -454,62 +524,29 @@ and the four solution arrays, and outputs both an overall pallet figure
 (colored by group) and one figure per drop step (with an arrow showing the
 opening plate side).
 
-\subsection{Worked example}
-\label{sec:example}
-
-To make the output of the model concrete, we run \texttt{sample.py} on a
-$70 \times 70$ pack and an $800 \times 1200$ pallet. The geometry helper
-chooses the rotation that maximises pack count, yielding an
-$11 \times 17$ grid (\(n = 187\) boxes). With \(S = 3 \cdot 70 = 210\),
-the gripper capacity is \(\lfloor (210 + 70)/70 \rfloor = 4\) boxes, and
-each row of 11 boxes is split into 3 groups of sizes $3+4+4$, for a
-total of \(n\_groups = 51\).
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.55\linewidth]{images/sample_pallet.pdf}
-  \caption{Pallet layout produced by the grouping stage: 51 groups
-  tiling the $11 \times 17$ grid in row-major order, each colored
-  distinctly. Groups alternate $3$--$4$--$4$ across each row.}
-  \label{fig:sample-pallet}
-\end{figure}
-
-Figure~\ref{fig:sample-schedule} samples four steps from the 51-step
-schedule produced by the model. The opening plate is highlighted by a
-red border on the active group and a blue arrow pointing in the
-direction the plate opens; the side it points to is always empty at the
-moment of release.
-
-\begin{figure}[h]
-  \centering
-  \begin{subfigure}[t]{0.24\linewidth}
-    \includegraphics[width=\linewidth]{images/sample_step_01.pdf}
-    \caption{Step 1: \(G_{51}\), bottom-right corner.}
-  \end{subfigure}\hfill
-  \begin{subfigure}[t]{0.24\linewidth}
-    \includegraphics[width=\linewidth]{images/sample_step_10.pdf}
-    \caption{Step 10: \(G_{38}\) opens left into a still-empty cell.}
-  \end{subfigure}\hfill
-  \begin{subfigure}[t]{0.24\linewidth}
-    \includegraphics[width=\linewidth]{images/sample_step_25.pdf}
-    \caption{Step 25: \(G_{15}\), about halfway through.}
-  \end{subfigure}\hfill
-  \begin{subfigure}[t]{0.24\linewidth}
-    \includegraphics[width=\linewidth]{images/sample_step_51.pdf}
-    \caption{Step 51: \(G_1\), the final drop, opens left into the
-    pallet boundary.}
-  \end{subfigure}
-  \caption{Selected drop steps from the 51-step schedule. The red
-  border marks the group being placed; the blue arrow shows the
-  opening plate side, which always faces a free cell.}
-  \label{fig:sample-schedule}
-\end{figure}
-
-The schedule starts in the bottom-right corner and works back toward
-the top-left: at step 1 the gripper drops \(G_{51}\) opening to the
-left (its left neighbor \(G_{50}\) has not yet been placed), and the
-final step places \(G_1\) opening to the left into the pallet edge
-(no left neighbor exists, so the boundary sentinel applies).
+%\subsection{Worked example}
+%\label{sec:example}
+%
+%To make the output of the model concrete, we run \texttt{sample.py} on a
+%$70 \times 70$ pack and an $800 \times 1200$ pallet. The geometry helper
+%chooses the rotation that maximises pack count, yielding an
+%$11 \times 17$ grid (\(n = 187\) boxes). With \(S = 3 \cdot 70 = 210\),
+%the gripper capacity is \(\lfloor (210 + 70)/70 \rfloor = 4\) boxes, and
+%each row of 11 boxes is split into 3 groups of sizes $3+4+4$, for a
+%total of \(n\_groups = 51\).
+%
+%Figure~\ref{fig:sample-schedule} samples four steps from the 51-step
+%schedule produced by the model. The opening plate is highlighted by a
+%red border on the active group and a blue arrow pointing in the
+%direction the plate opens; the side it points to is always empty at the
+%moment of release.
+%
+%
+%The schedule starts in the bottom-right corner and works back toward
+%the top-left: at step 1 the gripper drops \(G_{51}\) opening to the
+%left (its left neighbor \(G_{50}\) has not yet been placed), and the
+%final step places \(G_1\) opening to the left into the pallet edge
+%(no left neighbor exists, so the boundary sentinel applies).
 
 % =============================================================================
 \section{Benchmarking}

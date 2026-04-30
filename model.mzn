@@ -32,43 +32,48 @@ constraint forall(i in 1..n_groups)(
   (group_start[i] + group_len[i] - 2)     div boxes_along_x
 );
 
-%% ── Part 2: neighbor computation (pure par, from group index structure) ───────
+%% ── Part 2: drop scheduling ───────────────────────────────────────────────────
 %
 %  Within each y-row, groups are numbered consecutively.
 %  Group g occupies position  (g-1) mod groups_per_row  within its row.
-%  Left  neighbor = g-1  unless g is the leftmost in its row
-%  Right neighbor = g+1  unless g is the rightmost in its row
+%  Group g is leftmost  in its row when  (g-1) mod groups_per_row = 0
+%  Group g is rightmost in its row when  (g-1) mod groups_per_row = groups_per_row - 1
 %
-array[1..n_groups] of par int: left_neighbor =
-  [ if (g - 1) mod groups_per_row > 0
-    then g - 1
-    else 0
-    endif
-  | g in 1..n_groups ];
-
-array[1..n_groups] of par int: right_neighbor =
-  [ if (g - 1) mod groups_per_row < groups_per_row - 1
-    then g + 1
-    else 0
-    endif
-  | g in 1..n_groups ];
-
-%% ── Part 2: drop scheduling ───────────────────────────────────────────────────
 array[1..n_groups] of var 1..n_groups: drop_order; % at which step group g is placed
 array[1..n_groups] of var 0..1:        plate;       % 0 = left plate opens, 1 = right
 
 % drop_order is a permutation of 1..n_groups
 constraint alldifferent(drop_order);
 
-% When releasing group g, the opening plate must face a free direction:
-%   plate=0 (left):  no left neighbor, OR left neighbor not yet placed
-%   plate=1 (right): no right neighbor, OR right neighbor not yet placed
-constraint forall(g in 1..n_groups)(
-  (plate[g] = 0 /\
-    (left_neighbor[g]  = 0 \/ drop_order[left_neighbor[g]]  > drop_order[g]))
+constraint forall(g in 1..n_groups where g <= groups_per_row)(
+  plate[g] = 0 \/
+  (
+    plate[g] = 1 /\
+    drop_order[g + groups_per_row] > drop_order[g]
+  )
+);
+
+constraint forall(g in 1..n_groups where
+  g > groups_per_row /\ g <= n_groups - groups_per_row
+)(
+  (
+    plate[g] = 0 /\
+    drop_order[g - groups_per_row] > drop_order[g]
+  )
   \/
-  (plate[g] = 1 /\
-    (right_neighbor[g] = 0 \/ drop_order[right_neighbor[g]] > drop_order[g]))
+  (
+    plate[g] = 1 /\
+    drop_order[g + groups_per_row] > drop_order[g]
+  )
+);
+
+constraint forall(g in 1..n_groups where g > n_groups - groups_per_row)(
+  (
+    plate[g] = 0 /\
+    drop_order[g - groups_per_row] > drop_order[g]
+  )
+  \/
+  plate[g] = 1
 );
 
 solve satisfy;
