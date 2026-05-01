@@ -61,7 +61,7 @@ def solve_instance(box_x, box_y, pallet_x, pallet_y, solver_name="gecode"):
 
 
 def main():
-    box_x, box_y = 50, 50
+    box_x, box_y = 70, 70
     pallet_x, pallet_y = 800, 1200
 
     solution = solve_instance(box_x, box_y, pallet_x, pallet_y, solver_name="gecode")

@@ -24,19 +24,9 @@
 \end{figure}
 
 The benchmark evaluates the MiniZinc model on every
-\((\text{pallet}, \text{pack}, \text{grip})\) combination defined by the
-benchmark grid. The pallet presets are listed in
-Table~\ref{tab:bench-pallets}, while the pack sizes are listed in
+\((\text{pallet}, \text{pack})\) combination obtained from the
+pallet presets in Table~\ref{tab:bench-pallets} and the pack sizes in
 Table~\ref{tab:bench-packs}.
-
-For each combination, the model is tested with four solvers:
-\texttt{gecode}, \texttt{cp-sat}, \texttt{chuffed}, and \texttt{highs}.
-These solvers represent and solve the problem in different ways.
-\texttt{gecode} and \texttt{chuffed} mainly rely on constraint propagation,
-\texttt{cp-sat} uses a SAT-based Boolean/integer representation, and
-\texttt{highs} uses a linear programming representation. Each run is executed
-with a timeout of 300 seconds.
-
 
 \begin{table}[h]
   \centering
@@ -62,7 +52,7 @@ with a timeout of 300 seconds.
   \begin{minipage}[t]{0.49\linewidth}
     \centering
     \begin{tabularx}{0.8\linewidth}{X}
-      \toprule\arraybackslash\textbf{Pack size (mm)} \\
+      \toprule\arraybackslash\textbf{Box size (mm)} \\
       \midrule
       \arraybackslash $50 \times 50$   \\
       \arraybackslash $70 \times 70$   \\
@@ -72,11 +62,18 @@ with a timeout of 300 seconds.
       \arraybackslash $200 \times 200$ \\
       \bottomrule
     \end{tabularx}
-    \caption{Pack sizes used in the benchmark.}
+    \caption{Box sizes used in the benchmark.}
     \label{tab:bench-packs}
   \end{minipage}
 \end{table}
-
+For each combination, the model is tested with four solvers:
+\texttt{gecode}, \texttt{cp-sat}, \texttt{chuffed}, and \texttt{highs}.
+These solvers represent and solve the problem in different ways.
+\texttt{gecode} and \texttt{chuffed} mainly rely on constraint propagation,
+\texttt{cp-sat} uses a SAT-based representation, and
+\texttt{highs} uses a linear programming representation. Each run is executed
+with a timeout of 300 seconds.
+{\color{red} SISTEMA DA QUI}
 The gripper size is varied as an integer multiple of the box dimension along the
 \(x\)-axis: $S \in \{1,2,3\} \cdot \texttt{boxes\_x\_dim}.$
 This variation is used to study how the gripper size affects the feasibility and

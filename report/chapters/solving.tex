@@ -1,0 +1,15 @@
+\section{Solving}
+
+The proposed model is solved as a feasibility problem:
+
+\vspace{0.5cm}
+\begin{lstlisting}
+solve satisfy;
+\end{lstlisting}
+\vspace{0.5cm}
+No objective function is needed. The goal is only to find one valid schedule.
+The variables \texttt{drop\_order} and \texttt{plate} define the release order and
+the opening side for each group.
+If the vertical-neighbor constraints are satisfied, each release can be performed
+without collisions. Therefore, any satisfying assignment gives a valid
+pick-and-place plan.

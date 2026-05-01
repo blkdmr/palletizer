@@ -1,33 +1,34 @@
 \section{Calling the Model from Python}
 \label{sec:python}
 
-Small Python scripts are used to interface with the MiniZinc model. The model is
-loaded through \texttt{minizinc-python} and associated with the Gecode solver:
+Python is used to run the MiniZinc model on the benchmark instances. The script
+loads the model and selects the solver:
 
-\vspace{0.5cm}
+\vspace{0.3cm}
 \begin{lstlisting}[language=Python]
 model    = Model("model.mzn")
 solver   = Solver.lookup("gecode")
 instance = Instance(solver, model)
 \end{lstlisting}
-\vspace{0.5cm}
+\vspace{0.3cm}
+It then sets the instance parameters:
 
-The scripts then assign concrete values to the MiniZinc parameters and start the
-solving process:
-
-\vspace{0.5cm}
+\vspace{0.3cm}
 \begin{lstlisting}[language=Python]
 instance["n_boxes"]       = pallet_info["n_boxes"]
 instance["boxes_x_dim"]   = boxes_x_dim
 instance["boxes_along_x"] = pallet_info["boxes_along_x"]
 instance["boxes_along_y"] = pallet_info["boxes_along_y"]
 instance["grip_size"]     = grip_size
+\end{lstlisting}
+\vspace{0.3cm}
+After the parameters are set, the script calls the solver:
 
+\vspace{0.3cm}
+\begin{lstlisting}[language=Python]
 result = instance.solve()
 \end{lstlisting}
-\vspace{0.5cm}
-
-After the solver terminates, the Python code reads the MiniZinc output arrays
-\texttt{group\_start}, \texttt{group\_len}, \texttt{drop\_order}, and
-\texttt{plate}. These arrays describe the computed pallet layout and the
-corresponding placement schedule.
+\vspace{0.3cm}
+The output arrays \texttt{group\_start}, \texttt{group\_len},
+\texttt{drop\_order}, and \texttt{plate} are then read from the \texttt{result} map. They give
+the grouping of the boxes and the release schedule.

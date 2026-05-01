@@ -14,7 +14,6 @@ array[1..n_groups] of var 1..n_groups: drop_order;
 array[1..n_groups] of var 0..1: plate;
 \end{lstlisting}
 \vspace{0.5cm}
-
 The only global constraint required to make \texttt{drop\_order} a valid
 schedule is \texttt{alldifferent}. Since every value in \texttt{drop\_order}
 belongs to the domain \(1,\dots,\texttt{n\_groups}\), forcing all values to be
@@ -25,8 +24,7 @@ different ensures that each release step is assigned to exactly one group.
 constraint alldifferent(drop_order);
 \end{lstlisting}
 \vspace{0.5cm}
-
-The feasibility of a release depends on the position of the adjacent groups in the same
+The feasibility of a release depends on the positions of the adjacent groups in the same
 vertical column. As shown in Figure~\ref{fig:sample-pallet}, groups are
 numbered from left to right within each row, and then from top to
 bottom across rows.
@@ -34,18 +32,17 @@ Therefore, since each row contains \texttt{groups\_per\_row} groups,
 two groups that are aligned in consecutive rows have indices
 that differ by \texttt{groups\_per\_row}. For a generic group \(g\),
 the vertical neighborhood is therefore given by 
-$g \pm \texttt{groups\_per\_row},$ whenever these indices are within the valid range.
+$g \pm \texttt{groups\_per\_row}$, whenever these indices are within the valid range.
 Groups in the first pallet row have no upper neighbor,
 while groups in the last pallet row have no lower neighbor.
 
-The final constraint encodes the physical restriction on the gripper plates:
-when a group is released, the selected plate must open toward a free direction.
+When a group is released, the selected plate must open toward a free direction.
 A direction is free if the group lies on the corresponding pallet boundary, or
 if the group in that direction is scheduled to be released later and is
 therefore still absent from the pallet at the current release step.
 
 Since the relevant neighbors are above and below the current group, the
-constraint is written by separating the first row, the internal rows, and the
+constraints are written by separating the first row, the internal rows, and the
 last row. This avoids invalid array accesses at the pallet boundaries.
 
 \vspace{0.5cm}
@@ -83,32 +80,21 @@ constraint forall(g in 1..n_groups where g > n_groups - groups_per_row)(
 \end{lstlisting}
 \vspace{0.5cm}
 
-The first constraint handles groups in the first pallet row. These groups have
+The \textit{first} constraint handles groups in the first pallet row. These groups have
 no upper neighbor, so opening plate \(0\) is always feasible. Opening plate
 \(1\), instead, is feasible only if the lower neighbor is released later.
-
-The second constraint handles the internal rows. In this case, both vertical
+The \textit{second} constraint handles the internal rows. In this case, both vertical
 neighbors exist. Opening plate \(0\) is feasible only if the upper neighbor
 \(g-\texttt{groups\_per\_row}\) is released later. Similarly, opening plate
 \(1\) is feasible only if the lower neighbor
 \(g+\texttt{groups\_per\_row}\) is released later.
-
-The third constraint handles groups in the last pallet row. These groups have
+The \textit{third} constraint handles groups in the last pallet row. These groups have
 no lower neighbor, so opening plate \(1\) is always feasible. Opening plate
 \(0\) is feasible only if the upper neighbor is released later.
 
-The model is formulated as a feasibility problem:
-
-\vspace{0.5cm}
-\begin{lstlisting}
-solve satisfy;
-\end{lstlisting}
-\vspace{0.5cm}
-
-No objective function is required. Any assignment of \texttt{drop\_order} and
-\texttt{plate} that satisfies the vertical-neighbor constraint defines a valid
-pick-and-place plan. Figure~\ref{fig:sample-schedule} shows an example of such a
+Figure~\ref{fig:sample-schedule} shows an example of such a
 schedule at different placement steps.
+
 
 \begin{figure}[h]
   \centering
