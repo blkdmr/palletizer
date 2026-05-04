@@ -3,23 +3,23 @@
 
 \begin{figure}[t]
   \centering
-  \begin{subfigure}[t]{0.48\linewidth}
+  \begin{subfigure}[t]{0.5\linewidth}
     \includegraphics[width=\linewidth]{figures/scaling_overall_n_boxes_grip1x.pdf}
     \caption{$k=1$}
   \end{subfigure}\hfill
-  \begin{subfigure}[t]{0.48\linewidth}
+  \begin{subfigure}[t]{0.5\linewidth}
     \includegraphics[width=\linewidth]{figures/scaling_overall_n_boxes_grip2x.pdf}
     \caption{$k=2$}
   \end{subfigure}
 
   \medskip
 
-  \begin{subfigure}[t]{0.48\linewidth}
+  \begin{subfigure}[t]{0.5\linewidth}
     \includegraphics[width=\linewidth]{figures/scaling_overall_n_boxes_grip3x.pdf}
     \caption{$k=3$}
   \end{subfigure}
-  \caption{Solve time vs. number of boxes, split by gripper multiplier, with
-  $S = k \cdot \texttt{boxes\_x\_dim}$. The $y$-axis is logarithmic.}
+  \caption{Runtime scaling for the three gripper multipliers
+  $k \in \{1,2,3\}$. The $y$-axis uses a logarithmic scale.}
   \label{fig:scaling-per-grip}
 \end{figure}
 
@@ -73,69 +73,62 @@ These solvers represent and solve the problem in different ways.
 \texttt{cp-sat} uses a SAT-based representation, and
 \texttt{highs} uses a linear programming representation. Each run is executed
 with a timeout of 300 seconds.
-{\color{red} SISTEMA DA QUI}
-The gripper size is varied as an integer multiple of the box dimension along the
-\(x\)-axis: $S \in \{1,2,3\} \cdot \texttt{boxes\_x\_dim}.$
-This variation is used to study how the gripper size affects the feasibility and
-runtime of the scheduling model.
-
-In the model, this makes \texttt{max\_pkble\_boxes} equal to \(k+1\).
-The three benchmark cases therefore correspond to maximum group lengths of
-two, three, and four boxes along a pallet row.
-
-All timing plots in this section use a logarithmic scale for the time axis.
-This is useful because the benchmark spans several orders of magnitude: some
-\texttt{gecode} runs are solved in milliseconds, while several \texttt{highs}
-runs reach the 300-second timeout. With a linear scale, the fast solvers would
-be compressed near zero and the comparison would be much harder to read.
+The benchmark considers three gripper sizes, $S \in \{1,2,3\}\cdot \texttt{boxes\_x\_dim},$
+allowing us to compare how the gripper size affects grouping and
+scheduling performance.
 
 \subsection{Scaling by gripper size}
+The first comparison fixes the gripper multiplier and measures how the
+solve time changes with the total number of boxes. Figure~\ref{fig:scaling-per-grip}
+shows the resulting scaling curves for $k=1$, $k=2$, and $k=3$.
+This analysis captures the effect of the gripper size on the proposed model.
+Larger grippers reduce the number of groups that must be scheduled:
+the average number of groups decreases from about $75$ for $k=1$
+to about $40$ for $k=3$. Therefore, the solve time generally
+decreases as the multiplier increases.
 
-The first comparison keeps the gripper multiplier fixed and studies how the
-reported solve time changes with the total number of boxes. This separates the
-three different grouping regimes before aggregating them into a single plot.
-Figure~\ref{fig:scaling-per-grip} shows the resulting scaling curves for
-$k=1$, $k=2$, and $k=3$.
-
-The split shows the expected effect of the gripper size. Larger grippers reduce
-the number of groups that must be scheduled, and the average number of groups
-drops from about $75$ for $k=1$ to about $40$ for $k=3$. As a result, the
-curves generally move downward when the multiplier increases.
-
-\texttt{gecode} stays in the lowest band and is almost flat across the whole
-range. \texttt{cp-sat} scales more visibly with the number of boxes, but still
-remains well below the timeout. \texttt{chuffed} is usually fast, with one
-timeout on the densest $k=1$ instance. \texttt{highs} is consistently the
-slowest solver.
+In particular, \texttt{gecode} remains in the lowest runtime range and
+shows the best scaling behaviour. \texttt{cp-sat} shows a clearer
+dependence on the number of boxes, but remains well below the timeout.
+\texttt{chuffed} is usually fast, although it times out on the densest
+instance for $k=1$. \texttt{highs} is consistently the slowest solver.
 
 \subsection{Overall solver behaviour}
 
-After separating the grip sizes, the full benchmark can be viewed as one
-aggregate scaling plot. Figure~\ref{fig:scaling-overall} shows solve time with
-respect to the total number of boxes on the pallet for every solver across all
-instances.
+After separating the gripper sizes, we aggregate all benchmark runs into a
+single scaling plot. Figure~\ref{fig:scaling-overall} reports the solve time as
+a function of the total number of boxes, considering all solvers and all tested
+instances. This view highlights the global trend across the benchmark and makes
+the relative behaviour of the solvers easier to compare.
+
+Overall, the comparison confirms that the propagation-based solvers are the most
+suitable for this model. \texttt{gecode} gives the most stable performance and
+remains close to the bottom of the plot for almost all instances. \texttt{chuffed}
+is also competitive, but its performance is less regular. \texttt{cp-sat}
+shows a stronger dependence on the instance size, although it still remains
+far from the timeout in most runs. In contrast, \texttt{highs}
+performs worst and several runs approach or reach the timeout.
 
 \begin{figure}[t]
   \centering
   \includegraphics[width=0.7\linewidth]{figures/scaling_overall_n_boxes.pdf}
-  \caption{Solve time vs. total number of boxes --- all solvers, all
-  instances. The $y$-axis is logarithmic.}
+  \caption{Aggregate runtime scaling over all benchmark instances and solvers.
+  The $y$-axis uses a logarithmic scale.}
   \label{fig:scaling-overall}
 \end{figure}
 
 \subsection{Per-pallet breakdown}
+Another useful comparison studies how the pallet preset influences solver
+runtime. Differences across presets reflect how \texttt{boxes\_along\_x} and
+\texttt{boxes\_along\_y} determine the number and arrangement of groups.
+Figure~\ref{fig:scaling-per-pallet} shows the resulting breakdown.
 
-Splitting the data by pallet preset, as shown in
-Figure~\ref{fig:scaling-per-pallet}, isolates the effect of pack count from
-pallet shape. For a fixed pallet, the curves are functions of pack count and
-gripper size; differences between pallets reflect the impact of
-\texttt{boxes\_along\_x} and \texttt{boxes\_along\_y} on the number of groups.
-
-The larger pallets expose the same behavior seen in the aggregate plots more
-clearly: dense layouts with many small boxes are the hard cases, while larger
-boxes produce fewer groups and remain easier for all solvers. The log scale is
-especially useful in these plots because it shows the sub-second propagation
-runs and the near-timeout \texttt{highs} runs in the same figure.
+The relative behaviour of the solvers remains mostly unchanged across pallets:
+\texttt{gecode} stays the most stable, \texttt{cp-sat} and \texttt{chuffed}
+remain competitive, and \texttt{highs} is usually the slowest. Larger presets,
+especially the Industrie, US, and Australian pallets, make the separation between
+solvers more visible because they include denser instances. The half-pallet
+instances are smaller, so the differences are less pronounced.
 
 \begin{figure}[t]
   \centering
@@ -165,29 +158,42 @@ runs and the near-timeout \texttt{highs} runs in the same figure.
     \includegraphics[width=\linewidth]{figures/scaling_australian_n_boxes.pdf}
     \caption{Australian}
   \end{subfigure}
-  \caption{Solve time vs. number of boxes, broken down by pallet preset. The
-  $y$-axis is logarithmic.}
+  \caption{Runtime comparison across pallet presets. Each subplot aggregates all
+  gripper multipliers for the corresponding preset. The $y$-axis uses a
+  logarithmic scale.}
   \label{fig:scaling-per-pallet}
+
 \end{figure}
 
-\subsection{Wall time vs.\ solve time}
+\subsection{Flattening and execution overhead}
 
-The gap between Python-measured wall time and solver-reported solve time
-captures MiniZinc flattening and inter-process overhead.
-Figure~\ref{fig:wall-vs-solve} plots the two against each other; points
-above the diagonal indicate runs in which the harness cost dominated the search
-itself. In this plot both axes are logarithmic, so the small overheads of the
-fast runs and the long timeout-scale runs can be compared in the same view.
+The last analysis compares the solver-reported time with the total runtime
+measured by the Python benchmark script. This comparison estimates the cost of
+the steps that occur before the actual solver search. The main one is
+MiniZinc flattening: in this phase, the high-level MiniZinc model and the
+instance data are translated into a lower-level FlatZinc representation, which
+is then passed to the selected backend solver. The remaining overhead includes
+Python instance construction, MiniZinc invocation, and process startup.
 
-This distinction is especially visible for the fastest solver runs: their
-reported solve time is very small, so model construction, flattening, and
-process startup become a relevant part of the measured wall time. For the slow
-runs near the timeout, instead, wall time and solve time are much closer.
+Figure~\ref{fig:wall-vs-solve} shows the resulting comparison. The diagonal line
+marks equal total runtime and solver-reported time. Points close to the diagonal
+correspond to runs where most of the time is spent inside the solver. Points
+above the diagonal instead indicate a larger overhead outside the solver; in
+these cases, flattening and execution costs are more relevant relative to the
+actual solving time.
+
+The plot shows that this effect is strongest for the fastest runs, especially
+for \texttt{gecode} and several \texttt{chuffed} executions. Their
+solver-reported time is very small, so even a modest overhead produces a
+visible separation from the diagonal. For slower runs, especially
+\texttt{highs} and the larger \texttt{cp-sat} instances, the points are closer
+to the diagonal. In those cases, the solving phase dominates the total runtime,
+and the relative overhead becomes less important.
 
 \begin{figure}[t]
   \centering
   \includegraphics[width=0.75\linewidth]{figures/wall_vs_solve.pdf}
-  \caption{Wall time vs. solve time per run. The diagonal represents
-  zero overhead; both axes are logarithmic.}
+  \caption{Solver-reported time compared with the total runtime measured by the
+  Python benchmark script.}
   \label{fig:wall-vs-solve}
 \end{figure}
