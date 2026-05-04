@@ -3,7 +3,19 @@ from collections import defaultdict
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 from matplotlib import cm
+
+
+mpl.rcParams.update({
+    "font.size": 17,
+    "axes.labelsize": 15,
+    "xtick.labelsize": 15,
+    "ytick.labelsize": 15,
+    "legend.fontsize": 14,
+    "pdf.fonttype": 42,
+    "ps.fonttype": 42,
+})
 
 
 ROOT_DIR = Path("benchmark") 
@@ -71,7 +83,7 @@ def plot_scaling_overall(rows, colors, out_path, x_axis):
     ax.set_xlabel(x_axis)
     ax.set_ylabel("solve_time (s, log scale)")
     ax.set_yscale("log")
-    ax.legend()
+    ax.legend(frameon=True)
     plt.tight_layout()
     plt.savefig(out_path, format="pdf", dpi=600)
     plt.close(fig)
@@ -97,7 +109,7 @@ def plot_scaling_per_pallet(rows, colors, out_dir, x_axis):
         ax.set_xlabel(x_axis)
         ax.set_ylabel("solve_time (s, log scale)")
         ax.set_yscale("log")
-        ax.legend()
+        ax.legend(frameon=True)
         plt.tight_layout()
         out_path = out_dir / f"scaling_{pallet}_{x_axis}.pdf"
         plt.savefig(out_path, format="pdf", dpi=600)
@@ -132,7 +144,7 @@ def plot_solver_summary(rows, colors, out_path):
            yerr=[lo_err, hi_err], capsize=4, ecolor="black")
     ax.set_yscale("log")
     ax.set_xticks(xs)
-    ax.set_xticklabels(solvers)
+    ax.set_xticklabels(solvers, rotation=30, ha="right")
     ax.set_ylabel("solve_time (s, log scale)")
     plt.tight_layout()
     plt.savefig(out_path, format="pdf", dpi=600)
@@ -161,7 +173,7 @@ def plot_scaling_by_grip(rows, colors, out_path):
     ax.set_ylabel("solve_time (s, mean, log scale)")
     ax.set_yscale("log")
     ax.set_xticks(sorted({r["grip_mult"] for r in rows}))
-    ax.legend()
+    ax.legend(frameon=True)
     plt.tight_layout()
     plt.savefig(out_path, format="pdf", dpi=600)
     plt.close(fig)
@@ -188,7 +200,7 @@ def plot_scaling_overall_per_grip(rows, colors, out_dir, x_axis):
         ax.set_xlabel(x_axis)
         ax.set_ylabel("solve_time (s, log scale)")
         ax.set_yscale("log")
-        ax.legend()
+        ax.legend(frameon=True)
         plt.tight_layout()
         out_path = out_dir / f"scaling_overall_{x_axis}_grip{g}x.pdf"
         plt.savefig(out_path, format="pdf", dpi=600)
@@ -218,7 +230,7 @@ def plot_wall_vs_solve(rows, colors, out_path):
     ax.set_ylim(lim_lo, lim_hi)
     ax.set_xlabel("solve_time (s, log scale)")
     ax.set_ylabel("wall_time (s, log scale)")
-    ax.legend()
+    ax.legend(frameon=True)
     plt.tight_layout()
     plt.savefig(out_path, format="pdf", dpi=600)
     plt.close(fig)

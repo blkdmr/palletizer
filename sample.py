@@ -5,6 +5,20 @@ from lib.visualize import render_pallet, render_schedule
 
 from pathlib import Path
 
+import matplotlib as mpl
+
+
+mpl.rcParams.update({
+    "font.size": 16,
+    "axes.labelsize": 18,
+    "xtick.labelsize": 15,
+    "ytick.labelsize": 15,
+    "legend.fontsize": 14,
+    "pdf.fonttype": 42,
+    "ps.fonttype": 42,
+})
+
+
 def solve_instance(box_x, box_y, pallet_x, pallet_y, solver_name="gecode"):
     pallet_info = gen_pallet_info(box_x, box_y, pallet_x, pallet_y)
     boxes_x_dim = box_x if not pallet_info["rotated"] else box_y
@@ -75,8 +89,9 @@ def main():
     
     render_pallet(solution,   root_export_dir / "pallet.pdf")
     render_schedule(solution, schedule_export_dir / "schedule.pdf")
-    print(f"Wrote pallet.png ({len(solution['groups'])} groups) and "
-          f"schedule.png ({len(solution['schedule'])} steps)")
+    print(f"Wrote pallet.pdf ({len(solution['groups'])} groups) and "
+          f"schedule.pdf ({len(solution['schedule'])} steps)")
+
 
 if __name__ == "__main__":
     main()
