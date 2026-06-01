@@ -22,14 +22,9 @@ ROOT_DIR = Path("benchmark")
 INPUT_FILE = ROOT_DIR / "results.json"
 OUTPUT_DIR = ROOT_DIR / Path("plots") 
 
-TIME_FLOOR  = 1e-4  # safety lower bound for solvers that report solve_time = 0
+TIME_FLOOR  = 1e-4 
 
-# Field used as X axis on scaling plots.
-# One of: "n_boxes", "n_groups", "box_x", "box_y"
 X_AXIS = "n_boxes"
-
-# Solvers to exclude from plots (e.g. {"highs", "chuffed"}).
-SKIP_SOLVERS = set()#{"highs"}
 
 
 def load_results(path):
@@ -80,8 +75,8 @@ def plot_scaling_overall(rows, colors, out_path, x_axis):
         ax.plot(xs, ys, "o-", label=solver, color=colors[solver],
                 markersize=5, linewidth=1.4, alpha=0.85)
 
-    ax.set_xlabel(x_axis)
-    ax.set_ylabel("solve_time (s, log scale)")
+    ax.set_xlabel(x_axis.replace("_", " "))
+    ax.set_ylabel("solve time (s)")
     ax.set_yscale("log")
     ax.legend(frameon=True)
     plt.tight_layout()
@@ -106,8 +101,8 @@ def plot_scaling_per_pallet(rows, colors, out_dir, x_axis):
             ys = [p[1] for p in points]
             ax.plot(xs, ys, "o-", label=solver, color=colors[solver],
                     markersize=6, linewidth=1.6, alpha=0.85)
-        ax.set_xlabel(x_axis)
-        ax.set_ylabel("solve_time (s, log scale)")
+        ax.set_xlabel(x_axis.replace("_", " "))
+        ax.set_ylabel("solve time (s)")
         ax.set_yscale("log")
         ax.legend(frameon=True)
         plt.tight_layout()
@@ -145,7 +140,7 @@ def plot_solver_summary(rows, colors, out_path):
     ax.set_yscale("log")
     ax.set_xticks(xs)
     ax.set_xticklabels(solvers, rotation=30, ha="right")
-    ax.set_ylabel("solve_time (s, log scale)")
+    ax.set_ylabel("solve time (s)")
     plt.tight_layout()
     plt.savefig(out_path, format="pdf", dpi=600)
     plt.close(fig)
@@ -170,7 +165,7 @@ def plot_scaling_by_grip(rows, colors, out_path):
                 markersize=6, linewidth=1.6, alpha=0.85)
 
     ax.set_xlabel(r"grip multiplier $k$ (grip_size = $k \cdot$ boxes_x_dim)")
-    ax.set_ylabel("solve_time (s, mean, log scale)")
+    ax.set_ylabel("solve time (s)")
     ax.set_yscale("log")
     ax.set_xticks(sorted({r["grip_mult"] for r in rows}))
     ax.legend(frameon=True)
@@ -197,8 +192,8 @@ def plot_scaling_overall_per_grip(rows, colors, out_dir, x_axis):
             ys = [p[1] for p in points]
             ax.plot(xs, ys, "o-", label=solver, color=colors[solver],
                     markersize=5, linewidth=1.4, alpha=0.85)
-        ax.set_xlabel(x_axis)
-        ax.set_ylabel("solve_time (s, log scale)")
+        ax.set_xlabel(x_axis.replace("_", " "))
+        ax.set_ylabel("solve time (s)")
         ax.set_yscale("log")
         ax.legend(frameon=True)
         plt.tight_layout()
@@ -228,8 +223,8 @@ def plot_wall_vs_solve(rows, colors, out_path):
     ax.set_yscale("log")
     ax.set_xlim(lim_lo, lim_hi)
     ax.set_ylim(lim_lo, lim_hi)
-    ax.set_xlabel("solve_time (s, log scale)")
-    ax.set_ylabel("wall_time (s, log scale)")
+    ax.set_xlabel("solve time (s)")
+    ax.set_ylabel("execution time (s)")
     ax.legend(frameon=True)
     plt.tight_layout()
     plt.savefig(out_path, format="pdf", dpi=600)
@@ -237,9 +232,8 @@ def plot_wall_vs_solve(rows, colors, out_path):
 
 
 def main():
+    
     data, rows = load_results(INPUT_FILE)
-    if SKIP_SOLVERS:
-        rows = [r for r in rows if r["solver"] not in SKIP_SOLVERS]
     if not rows:
         print("No usable rows in benchmark_results.json")
         return
@@ -257,11 +251,11 @@ def main():
     if X_AXIS not in valid_axes:
         raise SystemExit(f"X_AXIS must be one of {valid_axes}, got {X_AXIS!r}")
 
-    plot_scaling_overall   (rows, colors, OUTPUT_DIR / f"scaling_overall_{X_AXIS}.pdf", X_AXIS)
+    plot_scaling_overall(rows, colors, OUTPUT_DIR / f"scaling_overall_{X_AXIS}.pdf", X_AXIS)
     per_pallet = plot_scaling_per_pallet(rows, colors, OUTPUT_DIR, X_AXIS)
-    plot_solver_summary    (rows, colors, OUTPUT_DIR / "solver_summary.pdf")
-    plot_wall_vs_solve     (rows, colors, OUTPUT_DIR / "wall_vs_solve.pdf")
-    plot_scaling_by_grip   (rows, colors, OUTPUT_DIR / "scaling_by_grip.pdf")
+    plot_solver_summary(rows, colors, OUTPUT_DIR / "solver_summary.pdf")
+    plot_wall_vs_solve(rows, colors, OUTPUT_DIR / "wall_vs_solve.pdf")
+    plot_scaling_by_grip(rows, colors, OUTPUT_DIR / "scaling_by_grip.pdf")
     per_grip = plot_scaling_overall_per_grip(rows, colors, OUTPUT_DIR, X_AXIS)
 
     print(f"Wrote {4 + len(per_pallet) + len(per_grip)} plots to {OUTPUT_DIR.resolve()}")

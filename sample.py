@@ -1,12 +1,9 @@
-from minizinc import Model, Solver, Instance
-
 from lib.utils import gen_pallet_info
 from lib.visualize import render_pallet, render_schedule
 
+from minizinc import Model, Solver, Instance
 from pathlib import Path
-
 import matplotlib as mpl
-
 
 mpl.rcParams.update({
     "font.size": 16,

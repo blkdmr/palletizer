@@ -1,0 +1,535 @@
+%----------------------------------------------------------------------------------------
+%    PACKAGES AND THEME
+%----------------------------------------------------------------------------------------
+
+\documentclass[aspectratio=169,xcolor=dvipsnames]{beamer}
+\usetheme{SimplePlus}
+
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{listings}
+
+\graphicspath{
+  {../report/figures/}
+  {../report/figures/scheduling/}
+  {report/figures/}
+  {report/figures/scheduling/}
+}
+
+\lstset{
+  basicstyle=\ttfamily\scriptsize,
+  breaklines=true,
+  showstringspaces=false,
+  frame=single,
+  rulecolor=\color{gray!40}
+}
+
+\setbeamertemplate{footline}[frame number]
+
+%----------------------------------------------------------------------------------------
+%    TITLE PAGE
+%----------------------------------------------------------------------------------------
+
+\title{Robot Movement Planning}
+\subtitle{Constraint Programming}
+\author{Alessio Russo}
+
+\institute{
+    Department of Mathematical, Physical and Computer Sciences\\
+    University of Parma
+}
+\date{}
+
+%----------------------------------------------------------------------------------------
+%    PRESENTATION SLIDES
+%----------------------------------------------------------------------------------------
+
+\begin{document}
+
+\begin{frame}[plain,noframenumbering]
+    \titlepage
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Problem Statement}
+    We want to build one complete pallet layer from boxes arriving on a conveyor.
+
+    \vspace{0.25cm}
+    \begin{block}{Given}
+        \begin{itemize}
+            \item \(n\) identical boxes, indexed by their arrival order on the belt.
+            \item A target pallet grid: every box \(i\) has a final cell \((P_x[i], P_y[i])\).
+            \item A gripper of size \(S\).
+        \end{itemize}
+    \end{block}
+
+    \begin{block}{Find}
+        A sequence of robot actions. Each action picks a consecutive interval of boxes from the belt and releases that interval as one group on the pallet.
+    \end{block}
+
+    \begin{alertblock}{The sequence is valid if}
+        every box is placed exactly once, each picked group fits in the gripper and lies on one pallet row, and every release has a free opening side.
+    \end{alertblock}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Pick and Release Operation}
+    \begin{figure}
+        \centering
+        \includegraphics[width=0.95\textwidth,height=0.78\textheight,keepaspectratio]{pick_and_release.pdf}
+    \end{figure}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{What Must Be Decided}
+    \begin{columns}[T,onlytextwidth]
+        \begin{column}{0.30\textwidth}
+            \begin{block}{Known Data}
+                \begin{itemize}
+                    \item Box dimensions
+                    \item Gripper size
+                    \item Pallet grid
+                    \item Target cell of each box
+                \end{itemize}
+            \end{block}
+        \end{column}
+        \hfill
+        \begin{column}{0.30\textwidth}
+            \begin{block}{Pick Groups}
+                \begin{itemize}
+                    \item Split the belt order into intervals
+                    \item Each interval is one pick
+                    \item No gaps or overlaps
+                \end{itemize}
+            \end{block}
+        \end{column}
+        \hfill
+        \begin{column}{0.30\textwidth}
+            \begin{block}{Release Plan}
+                \begin{itemize}
+                    \item Order the groups
+                    \item Choose the opening plate
+                    \item Keep one side free
+                \end{itemize}
+            \end{block}
+        \end{column}
+    \end{columns}
+
+    \vspace{0.55cm}
+    \begin{alertblock}{Key difficulty}
+        A group may fit in the gripper, but still be impossible to release if the opening side is blocked by boxes already placed on the pallet.
+    \end{alertblock}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Why Release Order Matters}
+    The gripper has two parallel plates, and only one plate opens during release.
+
+    \vspace{0.35cm}
+    \begin{itemize}
+        \item The opening side must face free space.
+        \item Free space can be outside the pallet boundary.
+        \item Otherwise, it must be a neighboring group that has not been placed yet.
+    \end{itemize}
+
+    \vspace{0.45cm}
+    \begin{block}{Consequence}
+        The problem is not only to partition boxes into feasible groups.
+        The groups must also be placed in an order that keeps one release side accessible at every step.
+    \end{block}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Gripper Capacity}
+    Each box has size \(x \times y\), with \(x\) parallel to the belt direction.
+    If the gripper size is \(S\), the picked interval can overflow by at most \(x/2\) on each side.
+
+    \vspace{0.6cm}
+    \begin{center}
+        \Large
+        \[
+            \texttt{max\_pkble\_boxes}
+            =
+            \left\lfloor
+            \frac{\texttt{grip\_size} + \texttt{boxes\_x\_dim}}
+                 {\texttt{boxes\_x\_dim}}
+            \right\rfloor
+        \]
+    \end{center}
+
+    \vspace{0.2cm}
+    \begin{itemize}
+        \item Picked boxes must be contiguous.
+        \item Picked boxes must belong to the same pallet row.
+        \item If \(S = kx\), the formula allows at most \(k+1\) boxes in one pick.
+        \item Larger grippers reduce the number of groups to schedule.
+    \end{itemize}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Model Decomposition}
+    The MiniZinc model separates the planning task into two coupled parts.
+
+    \vspace{0.4cm}
+    \begin{columns}[T,totalwidth=\textwidth]
+        \begin{column}{0.48\textwidth}
+            \begin{block}{1. Grouping}
+                Identify the sets of boxes that can be picked together.
+                Groups must be same-row intervals and must fit in the gripper.
+            \end{block}
+        \end{column}
+        \begin{column}{0.48\textwidth}
+            \begin{block}{2. Scheduling}
+                Choose the release order and the plate that opens for each group.
+                The selected opening side must be free at that step.
+            \end{block}
+        \end{column}
+    \end{columns}
+
+    \vspace{0.6cm}
+    \begin{center}
+        \[
+            \texttt{n\_groups}
+            =
+            \texttt{boxes\_along\_y}
+            \cdot
+            \left\lceil
+            \frac{\texttt{boxes\_along\_x}}
+                 {\texttt{max\_pkble\_boxes}}
+            \right\rceil
+        \]
+    \end{center}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Grouping Encodings}
+    Several encodings were considered.
+
+    \vspace{0.25cm}
+    \begin{table}
+        \centering
+        \small
+        \begin{tabular}{p{0.25\textwidth} p{0.32\textwidth} p{0.32\textwidth}}
+            \toprule
+            \textbf{Encoding} & \textbf{Representation} & \textbf{Main issue} \\
+            \midrule
+            Fully enumerated
+            & Store every box id in every group, with padding.
+            & Many decision variables and extra validity constraints. \\
+            \addlinespace
+            Binary assignment
+            & Boolean value for each pair \((g,i)\).
+            & Even larger, and contiguity is not encoded directly. \\
+            \addlinespace
+            Interval-based
+            & Store only start index and length.
+            & Compact; contiguity is implicit. \\
+            \bottomrule
+        \end{tabular}
+    \end{table}
+
+    \vspace{0.15cm}
+    \begin{alertblock}{Adopted representation}
+        Each group is described by \(\texttt{group\_start[g]}\) and \(\texttt{group\_len[g]}\).
+    \end{alertblock}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}[fragile]{Grouping Constraints}
+    The interval representation covers all boxes exactly once and prevents groups from crossing row boundaries.
+
+    \vspace{0.25cm}
+    \begin{lstlisting}
+array[1..n_groups] of var 1..n_boxes: group_start;
+array[1..n_groups] of var 1..max_pkble_boxes: group_len;
+
+constraint group_start[1] = 1;
+
+constraint forall(g in 1..n_groups - 1)(
+  group_start[g + 1] = group_start[g] + group_len[g]
+);
+
+constraint group_start[n_groups] + group_len[n_groups] - 1 = n_boxes;
+
+constraint forall(g in 1..n_groups)(
+  (group_start[g] - 1) div boxes_along_x =
+  (group_start[g] + group_len[g] - 2) div boxes_along_x
+);
+    \end{lstlisting}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Grouping Example}
+    Consider \(70 \times 70\) mm boxes on an \(800 \times 1200\) mm pallet.
+
+    \vspace{0.35cm}
+    \begin{itemize}
+        \item The pallet can contain an \(11 \times 17\) grid.
+        \item This gives \(187\) target positions.
+        \item With a gripper size of three box widths, the interval encoding creates row-wise groups.
+        \item Across each row, group lengths alternate as \(3/4/4\).
+    \end{itemize}
+
+    \vspace{0.25cm}
+    \begin{block}{What the figure shows}
+        Each color represents one picked group. The groups are contiguous intervals and never cross a row boundary.
+    \end{block}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Grouping Example Layout}
+    \begin{figure}
+        \centering
+        \includegraphics[width=0.95\textwidth,height=0.82\textheight,keepaspectratio]{sample_pallet.pdf}
+    \end{figure}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Scheduling Variables}
+    The scheduling phase decides when each group is released and which gripper plate opens.
+
+    \vspace{0.4cm}
+    \begin{columns}[T,totalwidth=\textwidth]
+        \begin{column}{0.48\textwidth}
+            \begin{block}{Release order}
+                \[
+                    \texttt{drop\_order[g]} \in 1,\dots,\texttt{n\_groups}
+                \]
+                The \texttt{alldifferent} constraint makes every release step unique.
+            \end{block}
+        \end{column}
+        \begin{column}{0.48\textwidth}
+            \begin{block}{Opening side}
+                \[
+                    \texttt{plate[g]} \in \{0,1\}
+                \]
+                Plate \(0\) opens upward; plate \(1\) opens downward.
+            \end{block}
+        \end{column}
+    \end{columns}
+
+    \vspace{0.45cm}
+    A release is feasible when the selected side faces the pallet boundary or a group scheduled for a later step.
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Release Feasibility}
+    Groups are numbered left to right within each row, then top to bottom.
+    Vertically aligned neighbors differ by \(\texttt{groups\_per\_row}\).
+
+    \vspace{0.35cm}
+    \begin{itemize}
+        \item First row: upper side is always free.
+        \item Internal rows: the chosen vertical neighbor must be absent at release time.
+        \item Last row: lower side is always free.
+    \end{itemize}
+
+    \vspace{0.45cm}
+    \begin{block}{Internal-row rule}
+        For an internal group \(g\), release is allowed if either:
+        \[
+            \texttt{plate[g]} = 0
+            \land
+            \texttt{drop\_order[g - groups\_per\_row]} > \texttt{drop\_order[g]}
+        \]
+        or
+        \[
+            \texttt{plate[g]} = 1
+            \land
+            \texttt{drop\_order[g + groups\_per\_row]} > \texttt{drop\_order[g]}.
+        \]
+    \end{block}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Scheduling Example}
+    \begin{figure}
+        \centering
+        \setlength{\tabcolsep}{2pt}
+        \begin{tabular}{cccc}
+            \includegraphics[height=0.58\textheight,keepaspectratio]{schedule_step_01.pdf} &
+            \includegraphics[height=0.58\textheight,keepaspectratio]{schedule_step_10.pdf} &
+            \includegraphics[height=0.58\textheight,keepaspectratio]{schedule_step_25.pdf} &
+            \includegraphics[height=0.58\textheight,keepaspectratio]{schedule_step_50.pdf} \\
+            \small Step 1 & \small Step 10 & \small Step 25 & \small Step 50
+        \end{tabular}
+    \end{figure}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}[fragile]{Solving and Python Runner}
+    The model is solved as a feasibility problem: any satisfying assignment gives a valid pick-and-release plan.
+
+    \vspace{0.25cm}
+    \begin{columns}[T,totalwidth=\textwidth]
+        \begin{column}{0.36\textwidth}
+            \begin{lstlisting}
+solve satisfy;
+            \end{lstlisting}
+
+            \begin{itemize}
+                \item No objective function is needed.
+                \item Outputs are grouping and scheduling arrays.
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.58\textwidth}
+            \begin{lstlisting}[language=Python]
+model    = Model("model.mzn")
+solver   = Solver.lookup("gecode")
+instance = Instance(solver, model)
+
+instance["n_boxes"]       = pallet_info["n_boxes"]
+instance["boxes_x_dim"]   = boxes_x_dim
+instance["boxes_along_x"] = pallet_info["boxes_along_x"]
+instance["boxes_along_y"] = pallet_info["boxes_along_y"]
+instance["grip_size"]     = grip_size
+
+result = instance.solve()
+            \end{lstlisting}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Benchmark Setup}
+    The benchmark combines pallet presets, box sizes, solvers, and gripper multipliers.
+
+    \vspace{0.25cm}
+    \begin{columns}[T,totalwidth=\textwidth]
+        \begin{column}{0.48\textwidth}
+            \begin{table}
+                \centering
+                \small
+                \begin{tabular}{lr}
+                    \toprule
+                    \textbf{Pallet} & \textbf{Dimensions (mm)} \\
+                    \midrule
+                    Europallet & \(1200 \times 800\) \\
+                    Industrie & \(1200 \times 1000\) \\
+                    US 40\(\times\)48 & \(1219 \times 1016\) \\
+                    Half-pallet & \(800 \times 600\) \\
+                    Australian & \(1165 \times 1165\) \\
+                    \bottomrule
+                \end{tabular}
+            \end{table}
+        \end{column}
+        \begin{column}{0.48\textwidth}
+            \begin{itemize}
+                \item Box sizes from \(50 \times 50\) to \(200 \times 200\) mm.
+                \item Solvers: \texttt{gecode}, \texttt{cp-sat}, \texttt{chuffed}, \texttt{highs}.
+                \item Timeout: \(300\) seconds.
+                \item Gripper sizes: \(S \in \{1,2,3\}\cdot\texttt{boxes\_x\_dim}\).
+            \end{itemize}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Scaling by Gripper Size}
+    \begin{columns}[T,totalwidth=\textwidth]
+        \begin{column}{0.35\textwidth}
+            \begin{itemize}
+                \item Larger grippers create fewer groups.
+                \item The average number of groups drops from about \(75\) for \(k=1\) to about \(40\) for \(k=3\).
+                \item \texttt{gecode} gives the most stable scaling.
+                \item \texttt{highs} is consistently the slowest backend.
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.61\textwidth}
+            \begin{figure}
+                \includegraphics[width=\linewidth]{scaling_by_grip.pdf}
+            \end{figure}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Overall Solver Behaviour}
+    \begin{columns}[T,totalwidth=\textwidth]
+        \begin{column}{0.42\textwidth}
+            \begin{itemize}
+                \item Propagation-based solvers are the best fit for this model.
+                \item \texttt{gecode} remains close to the lowest runtime range across almost all instances.
+                \item \texttt{chuffed} is competitive, but less regular.
+                \item \texttt{cp-sat} depends more visibly on instance size.
+                \item Several \texttt{highs} runs approach or reach timeout.
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.54\textwidth}
+            \begin{figure}
+                \includegraphics[width=\linewidth]{scaling_overall_n_boxes.pdf}
+            \end{figure}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Flattening and Execution Overhead}
+    \begin{columns}[T,totalwidth=\textwidth]
+        \begin{column}{0.42\textwidth}
+            \begin{itemize}
+                \item Total runtime includes more than solver search.
+                \item MiniZinc flattening translates the model and data into FlatZinc.
+                \item Python instance construction, invocation, and process startup also contribute overhead.
+                \item The overhead is most visible on very fast runs, especially for \texttt{gecode}.
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.54\textwidth}
+            \begin{figure}
+                \includegraphics[width=\linewidth]{wall_vs_solve.pdf}
+            \end{figure}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Conclusions}
+    \begin{itemize}
+        \item The movement planning task can be modeled compactly by separating grouping and scheduling decisions.
+        \item The interval representation avoids large membership encodings while preserving the geometric constraints.
+        \item Scheduling is handled with ordering variables and local vertical-neighborhood constraints.
+        \item CP-oriented solvers are the most effective on the tested instances.
+        \item Larger grippers reduce the number of groups and generally improve runtime.
+        \item Dense layouts with many small boxes remain the hardest benchmark cases.
+    \end{itemize}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}[plain,noframenumbering]
+    \centering
+    \Large{\textbf{Thank you for your attention!}}
+
+    \vspace{1.2cm}
+    \footnotesize
+    Alessio Russo\\
+    University of Parma
+\end{frame}
+
+%----------------------------------------------------------------------------------------
+
+\end{document}
