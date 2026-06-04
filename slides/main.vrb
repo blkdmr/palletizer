@@ -1,0 +1,30 @@
+\frametitle{Solving from Python}
+\small
+    The model is solved as a feasibility problem.  Python builds each benchmark instance, sends the parameters to MiniZinc, and reads the four decision arrays from the result.
+
+    \vspace{0.15cm}
+    \begin{columns}[T,totalwidth=\textwidth]
+        \begin{column}{0.32\textwidth}
+            \begin{lstlisting}
+solve satisfy;
+            \end{lstlisting}
+
+            \vspace{0.2cm}
+            No objective function is needed: any satisfying assignment is a valid pick-and-release plan.
+        \end{column}
+        \begin{column}{0.63\textwidth}
+            \begin{lstlisting}[language=Python,basicstyle=\ttfamily\tiny]
+model    = Model("model.mzn")
+solver   = Solver.lookup("gecode")
+instance = Instance(solver, model)
+
+instance["n_boxes"]       = pallet_info["n_boxes"]
+instance["boxes_x_dim"]   = boxes_x_dim
+instance["boxes_along_x"] = pallet_info["boxes_along_x"]
+instance["boxes_along_y"] = pallet_info["boxes_along_y"]
+instance["grip_size"]     = grip_size
+
+result = instance.solve()
+            \end{lstlisting}
+        \end{column}
+    \end{columns}
