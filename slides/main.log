@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.28 (MiKTeX 25.12) (preloaded format=pdflatex 2026.4.28)  5 JUN 2026 00:33
+This is pdfTeX, Version 3.141592653-2.6-1.40.28 (MiKTeX 25.12) (preloaded format=pdflatex 2026.4.28)  5 JUN 2026 14:43
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -816,154 +816,147 @@ Package pdftex.def Info: ./figures/pick_and_release.pdf  used on input line 121.
 (pdftex.def)             Requested size: 390.87575pt x 174.304pt.
 [3
 
- <./figures/pick_and_release.pdf>] [4
-
-]
+ <./figures/pick_and_release.pdf>]
 \openout4 = `main.vrb'.
 
  (main.vrb
-LaTeX Font Info:    Trying to load font information for T1+lmtt on input line 4.
+LaTeX Font Info:    Trying to load font information for T1+lmtt on input line 8.
  (C:\Users\aless\AppData\Local\Programs\MiKTeX\tex/latex/lm\t1lmtt.fd
 File: t1lmtt.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
 )
 LaTeX Font Info:    Font shape `T1/lmtt/bx/n' in size <8> not available
-(Font)              Font shape `T1/lmtt/b/n' tried instead on input line 5.
-) [5
+(Font)              Font shape `T1/lmtt/b/n' tried instead on input line 9.
+) [4
 
 ]
-Underfull \hbox (badness 1546) in paragraph at lines 207--207
-[]\T1/lmss/m/n/10 Group struc-ture is ex-plicit,
+Underfull \hbox (badness 1092) in paragraph at lines 174--174
+[]\T1/lmss/m/n/10 Chunk struc-ture is ex-plicit,
  []
 
 
-Overfull \hbox (3.0837pt too wide) in paragraph at lines 207--207
+Overfull \hbox (3.0837pt too wide) in paragraph at lines 174--174
 [][]  
  []
 
-[6
+[5
 
 {C:/Users/aless/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/lm/lm-rm.enc}{C:/Users/aless/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/lm/lm-mathit.enc}]
 \openout4 = `main.vrb'.
 
- (main.vrb) [7
+ (main.vrb) [6
 
 ]
+<./figures/pallet.pdf, id=80, 722.7pt x 328.50002pt>
+File: ./figures/pallet.pdf Graphic file (type pdf)
+<use ./figures/pallet.pdf>
+Package pdftex.def Info: ./figures/pallet.pdf  used on input line 218.
+(pdftex.def)             Requested size: 385.99557pt x 175.45253pt.
+ [7
+
+ <./figures/pallet.pdf>]
 \openout4 = `main.vrb'.
 
  (main.vrb) [8
-
-]
-<./figures/sample_pallet.pdf, id=92, 722.7pt x 328.50002pt>
-File: ./figures/sample_pallet.pdf Graphic file (type pdf)
-<use ./figures/sample_pallet.pdf>
-Package pdftex.def Info: ./figures/sample_pallet.pdf  used on input line 285.
-(pdftex.def)             Requested size: 246.8616pt x 112.20982pt.
- [9
-
- <./figures/sample_pallet.pdf>]
-\openout4 = `main.vrb'.
-
- (main.vrb) [10
-
-]
-\openout4 = `main.vrb'.
-
- (main.vrb) [11
 
 ]
 \openout4 = `main.vrb'.
 
  (main.vrb
 LaTeX Font Info:    Font shape `T1/lmtt/bx/n' in size <6> not available
-(Font)              Font shape `T1/lmtt/b/n' tried instead on input line 8.
-) [12
+(Font)              Font shape `T1/lmtt/b/n' tried instead on input line 18.
+) [9
+
+]
+\openout4 = `main.vrb'.
+
+ (main.vrb) [10
 
 ]
 LaTeX Font Info:    External font `lmex10' loaded for size
-(Font)              <10.95> on input line 382.
+(Font)              <10.95> on input line 342.
 LaTeX Font Info:    External font `lmex10' loaded for size
-(Font)              <8> on input line 382.
+(Font)              <8> on input line 342.
 LaTeX Font Info:    External font `lmex10' loaded for size
-(Font)              <6> on input line 382.
+(Font)              <6> on input line 342.
 LaTeX Font Info:    Font shape `T1/lmss/m/it' in size <10.95> not available
-(Font)              Font shape `T1/lmss/m/sl' tried instead on input line 382.
+(Font)              Font shape `T1/lmss/m/sl' tried instead on input line 342.
 LaTeX Font Info:    Font shape `T1/lmss/m/it' in size <8> not available
-(Font)              Font shape `T1/lmss/m/sl' tried instead on input line 382.
+(Font)              Font shape `T1/lmss/m/sl' tried instead on input line 342.
 LaTeX Font Info:    Font shape `T1/lmss/m/it' in size <6> not available
-(Font)              Font shape `T1/lmss/m/sl' tried instead on input line 382.
-<./figures/schedule/schedule_step_01.pdf, id=128, 433.62pt x 197.09999pt>
+(Font)              Font shape `T1/lmss/m/sl' tried instead on input line 342.
+<./figures/schedule/schedule_step_01.pdf, id=118, 433.62pt x 197.09999pt>
 File: ./figures/schedule/schedule_step_01.pdf Graphic file (type pdf)
 <use ./figures/schedule/schedule_step_01.pdf>
-Package pdftex.def Info: ./figures/schedule/schedule_step_01.pdf  used on input line 382.
+Package pdftex.def Info: ./figures/schedule/schedule_step_01.pdf  used on input line 342.
 (pdftex.def)             Requested size: 135.77719pt x 61.71689pt.
-<./figures/schedule/schedule_step_04.pdf, id=129, 433.62pt x 197.09999pt>
+<./figures/schedule/schedule_step_04.pdf, id=119, 433.62pt x 197.09999pt>
 File: ./figures/schedule/schedule_step_04.pdf Graphic file (type pdf)
 <use ./figures/schedule/schedule_step_04.pdf>
-Package pdftex.def Info: ./figures/schedule/schedule_step_04.pdf  used on input line 382.
+Package pdftex.def Info: ./figures/schedule/schedule_step_04.pdf  used on input line 342.
 (pdftex.def)             Requested size: 135.77719pt x 61.71689pt.
-<./figures/schedule/schedule_step_07.pdf, id=130, 433.62pt x 197.09999pt>
+<./figures/schedule/schedule_step_07.pdf, id=120, 433.62pt x 197.09999pt>
 File: ./figures/schedule/schedule_step_07.pdf Graphic file (type pdf)
 <use ./figures/schedule/schedule_step_07.pdf>
-Package pdftex.def Info: ./figures/schedule/schedule_step_07.pdf  used on input line 382.
+Package pdftex.def Info: ./figures/schedule/schedule_step_07.pdf  used on input line 342.
 (pdftex.def)             Requested size: 135.77719pt x 61.71689pt.
-<./figures/schedule/schedule_step_10.pdf, id=131, 433.62pt x 197.09999pt>
+<./figures/schedule/schedule_step_09.pdf, id=121, 433.62pt x 197.09999pt>
+File: ./figures/schedule/schedule_step_09.pdf Graphic file (type pdf)
+<use ./figures/schedule/schedule_step_09.pdf>
+Package pdftex.def Info: ./figures/schedule/schedule_step_09.pdf  used on input line 342.
+(pdftex.def)             Requested size: 135.77719pt x 61.71689pt.
+<./figures/schedule/schedule_step_10.pdf, id=122, 433.62pt x 197.09999pt>
 File: ./figures/schedule/schedule_step_10.pdf Graphic file (type pdf)
 <use ./figures/schedule/schedule_step_10.pdf>
-Package pdftex.def Info: ./figures/schedule/schedule_step_10.pdf  used on input line 382.
+Package pdftex.def Info: ./figures/schedule/schedule_step_10.pdf  used on input line 342.
 (pdftex.def)             Requested size: 135.77719pt x 61.71689pt.
-<./figures/schedule/schedule_step_13.pdf, id=132, 433.62pt x 197.09999pt>
-File: ./figures/schedule/schedule_step_13.pdf Graphic file (type pdf)
-<use ./figures/schedule/schedule_step_13.pdf>
-Package pdftex.def Info: ./figures/schedule/schedule_step_13.pdf  used on input line 382.
-(pdftex.def)             Requested size: 135.77719pt x 61.71689pt.
-<./figures/schedule/schedule_step_15.pdf, id=133, 433.62pt x 197.09999pt>
+<./figures/schedule/schedule_step_15.pdf, id=123, 433.62pt x 197.09999pt>
 File: ./figures/schedule/schedule_step_15.pdf Graphic file (type pdf)
 <use ./figures/schedule/schedule_step_15.pdf>
-Package pdftex.def Info: ./figures/schedule/schedule_step_15.pdf  used on input line 382.
+Package pdftex.def Info: ./figures/schedule/schedule_step_15.pdf  used on input line 342.
 (pdftex.def)             Requested size: 135.77719pt x 61.71689pt.
 
-Overfull \hbox (7.88765pt too wide) in paragraph at lines 382--382
+Overfull \hbox (7.88765pt too wide) in paragraph at lines 342--342
  [][] 
  []
 
-[13
+[11
 
- <./figures/schedule/schedule_step_01.pdf> <./figures/schedule/schedule_step_04.pdf> <./figures/schedule/schedule_step_07.pdf> <./figures/schedule/schedule_step_10.pdf> <./figures/schedule/schedule_step_13.pdf> <./figures/schedule/schedule_step_15.pdf>]
+ <./figures/schedule/schedule_step_01.pdf> <./figures/schedule/schedule_step_04.pdf> <./figures/schedule/schedule_step_07.pdf> <./figures/schedule/schedule_step_09.pdf> <./figures/schedule/schedule_step_10.pdf> <./figures/schedule/schedule_step_15.pdf>]
 \openout4 = `main.vrb'.
 
  (main.vrb (C:\Users\aless\AppData\Local\Programs\MiKTeX\tex/latex/listings\lstlang1.sty
 File: lstlang1.sty 2025/11/14 1.11b listings language file
-)) [14
+)) [12
 
-] [15
+] [13
 
 ]
-<./figures/scaling_by_grip.pdf, id=156, 578.16pt x 397.485pt>
+<./figures/scaling_by_grip.pdf, id=146, 578.16pt x 397.485pt>
 File: ./figures/scaling_by_grip.pdf Graphic file (type pdf)
 <use ./figures/scaling_by_grip.pdf>
-Package pdftex.def Info: ./figures/scaling_by_grip.pdf  used on input line 473.
+Package pdftex.def Info: ./figures/scaling_by_grip.pdf  used on input line 433.
 (pdftex.def)             Requested size: 241.01703pt x 165.6992pt.
- [16
+ [14
 
  <./figures/scaling_by_grip.pdf>]
-<./figures/scaling_overall_n_boxes.pdf, id=181, 722.7pt x 433.62pt>
+<./figures/scaling_overall_n_boxes.pdf, id=171, 722.7pt x 433.62pt>
 File: ./figures/scaling_overall_n_boxes.pdf Graphic file (type pdf)
 <use ./figures/scaling_overall_n_boxes.pdf>
-Package pdftex.def Info: ./figures/scaling_overall_n_boxes.pdf  used on input line 495.
+Package pdftex.def Info: ./figures/scaling_overall_n_boxes.pdf  used on input line 455.
 (pdftex.def)             Requested size: 230.40857pt x 138.24515pt.
- [17
+ [15
 
  <./figures/scaling_overall_n_boxes.pdf>]
-<./figures/wall_vs_solve.pdf, id=199, 578.16pt x 433.62pt>
+<./figures/wall_vs_solve.pdf, id=189, 578.16pt x 433.62pt>
 File: ./figures/wall_vs_solve.pdf Graphic file (type pdf)
 <use ./figures/wall_vs_solve.pdf>
-Package pdftex.def Info: ./figures/wall_vs_solve.pdf  used on input line 516.
+Package pdftex.def Info: ./figures/wall_vs_solve.pdf  used on input line 476.
 (pdftex.def)             Requested size: 220.92934pt x 165.697pt.
- [18
+ [16
 
- <./figures/wall_vs_solve.pdf>] [19
+ <./figures/wall_vs_solve.pdf>] [17
 
-] [20
+] [18
 
 ]
 \tf@nav=\write6
@@ -984,17 +977,17 @@ Package rerunfilecheck Info: File `main.out' has not changed.
 (rerunfilecheck)             Checksum: D41D8CD98F00B204E9800998ECF8427E;0.
  ) 
 Here is how much of TeX's memory you used:
- 24247 strings out of 467871
- 462334 string characters out of 5418376
- 1127702 words of memory out of 5000000
- 52558 multiletter control sequences out of 15000+600000
+ 24242 strings out of 467871
+ 462171 string characters out of 5418376
+ 1159574 words of memory out of 5000000
+ 52559 multiletter control sequences out of 15000+600000
  713062 words of font info for 103 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
  128i,11n,123p,454b,1692s stack positions out of 10000i,1000n,20000p,200000b,200000s
 <C:/Users/aless/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmmi10.pfb><C:/Users/aless/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmss10.pfb><C:/Users/aless/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmss12.pfb><C:/Users/aless/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmss8.pfb><C:/Users/aless/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmss9.pfb><C:/Users/aless/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmssbx10.pfb><C:/Users/aless/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmsso10.pfb><C:/Users/aless/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmsy10.pfb><C:/Users/aless/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmtk10.pfb><C:/Users/aless/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmtt10.pfb><C:/Users/aless/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmtt8.pfb>
-Output written on main.pdf (20 pages, 1432584 bytes).
+Output written on main.pdf (18 pages, 1432850 bytes).
 PDF statistics:
- 292 PDF objects out of 1000 (max. 8388607)
- 41 named destinations out of 1000 (max. 500000)
+ 281 PDF objects out of 1000 (max. 8388607)
+ 37 named destinations out of 1000 (max. 500000)
  110 words of extra memory for PDF output out of 10000 (max. 10000000)
 

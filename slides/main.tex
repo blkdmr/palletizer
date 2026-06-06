@@ -78,15 +78,15 @@
 \begin{frame}{Model Formulation}
     \small
     The robot movement problem is modeled as a feasibility problem.
-    For each pallet layer, the model decides how the incoming boxes are picked
-    and how the resulting groups are released on the pallet.
+    For each pallet layer, the model follows the order of incoming boxes
+    and decides how each picked chunk is placed on the pallet.
 
     \begin{columns}[T,totalwidth=\textwidth]
         \begin{column}{0.50\textwidth}
             \begin{block}{Decision variables}
                 \begin{itemize}
-                    \item which consecutive boxes form each pick group;
-                    \item when each picked group is released;
+                    \item which consecutive boxes form each chunk;
+                    \item where each picked chunk is placed;
                     \item which gripper plate opens at release.
                 \end{itemize}
             \end{block}
@@ -95,10 +95,10 @@
         \begin{column}{0.46\textwidth}
             \begin{block}{Constraints}
                 \begin{itemize}
-                    \item groups have no gaps or overlaps;
+                    \item chunks have no gaps or overlaps;
                     \item each box is picked and placed exactly once;
                     \item each pick fits within the gripper size;
-                    \item each group stays within one pallet row;
+                    \item each chunk stays within one pallet row;
                     \item the opening side is free at release.
                 \end{itemize}
             \end{block}
@@ -122,47 +122,14 @@
 
 %------------------------------------------------
 
-\begin{frame}{Grouping Model Construction}
+\begin{frame}[fragile]{Chunk Model Parameters}
     \small
-    The inputs of the model are the pallet grid, the box size, and the gripper capacity.
-    From this data, the model derives the number of boxes that can be picked at once
-    and the number of groups to schedule.
-
-    \vspace{0.20cm}
-    \begin{columns}[T,totalwidth=\textwidth]
-        \begin{column}{0.48\textwidth}
-            \begin{block}{Input data}
-                \begin{itemize}
-                    \item pallet grid dimensions;
-                    \item box length, used for gripper capacity;
-                    \item gripper size.
-                \end{itemize}
-            \end{block}
-        \end{column}
-
-        \begin{column}{0.48\textwidth}
-            \begin{block}{Derived quantities}
-                \begin{itemize}
-                    \item maximum boxes per pick;
-                    \item groups needed per row;
-                    \item total number of groups.
-                \end{itemize}
-            \end{block}
-        \end{column}
-    \end{columns}
-
-    \vspace{0.30cm}
-    These derived quantities define the finite domains used later in the model.
-\end{frame}
-
-%------------------------------------------------
-
-\begin{frame}[fragile]{Model Parameters}
-
+    The model inputs are the pallet grid, expressed as the number of boxes along each dimension,
+    the box size, the number of boxes, and the gripper capacity.
+    From these data, the model derives the maximum number of boxes that can be picked at once
+    and the minimum number of necessary chunks.
     \vspace{0.15cm}
     \begin{lstlisting}
-include "globals.mzn";
-
 par int: n_boxes;
 par int: boxes_x_dim;
 par int: boxes_along_x;
@@ -170,18 +137,18 @@ par int: boxes_along_y;
 par int: grip_size;
 
 par int: max_pkble_boxes =
-  (grip_size + boxes_x_dim) div boxes_x_dim;
+(grip_size + boxes_x_dim) div boxes_x_dim;
 
-par int: groups_per_row =
-  (boxes_along_x + max_pkble_boxes - 1) div max_pkble_boxes;
+par int: chunks_per_row =
+(boxes_along_x + max_pkble_boxes - 1) div max_pkble_boxes;
 
-par int: n_groups = boxes_along_y * groups_per_row;
+par int: n_chunks = boxes_along_y * chunks_per_row;
     \end{lstlisting}
 \end{frame}
 
 %------------------------------------------------
 
-\begin{frame}{Possible Group Representation}
+\begin{frame}{Possible Chunk Representation}
     \small
     The chosen representation should be compact, while preserving the fact that a pick is a consecutive interval
     in the belt order.
@@ -191,16 +158,16 @@ par int: n_groups = boxes_along_y * groups_per_row;
         \toprule
         \textbf{Encoding} & \textbf{Representation} & \textbf{Limitation} \\
         \midrule
-        Enumerated groups
-        & Store, for each group, the list of boxes it contains, using padding for shorter groups.
-        & Group structure is explicit, but many variables and extra constraints are needed. \\
-\midrule
+        Enumerated chunks
+        & Store, for each chunk, the list of boxes it contains, using padding for shorter chunks.
+        & Chunk structure is explicit, but many variables and extra constraints are needed. \\
+        \midrule
         Binary assignment
-        & Use one Boolean variable for each pair \((g,i)\), equal to true if box \(i\) is assigned to group \(g\).
+        & Use one Boolean variable for each pair \((c,i)\), equal to true if box \(i\) is assigned to chunk \(c\).
         & Membership is explicit, but the encoding is large; contiguity and row consistency require extra constraints. \\
-\midrule
+        \midrule
         Interval encoding
-        & Store only the first box and the length of each group.
+        & Store only the first box and the length of each chunk.
         & \textbf{Adopted}: compact, and contiguity is implicit. \\
         \bottomrule
     \end{tabular}
@@ -209,150 +176,143 @@ par int: n_groups = boxes_along_y * groups_per_row;
 
 %------------------------------------------------
 
-\begin{frame}[fragile]{Grouping Implementation}
+\begin{frame}[fragile]{Chunking Implementation}
     \vspace{0.10cm}
-    \textbf{Variables:} define the interval associated with each group.
+    \textbf{Variables:} define the interval associated with each chunk.
     \begin{lstlisting}
-array[1..n_groups] of var 1..n_boxes: group_start;
-array[1..n_groups] of var 1..max_pkble_boxes: group_len;
+array[1..n_chunks] of var 1..n_boxes: chunk_start;
+array[1..n_chunks] of var 1..max_pkble_boxes: chunk_len;
     \end{lstlisting}
 
     \vspace{0.10cm}
-    \textbf{Start condition:} the first group starts from the first box.
+    \textbf{Start condition:} the first chunk starts from the first box.
     \begin{lstlisting}
-constraint group_start[1] = 1;
+constraint chunk_start[1] = 1;
     \end{lstlisting}
 
     \vspace{0.10cm}
-    \textbf{No gaps or overlaps:} each group starts immediately after the previous one.
+    \textbf{No gaps or overlaps:} each chunk starts immediately after the previous one.
     \begin{lstlisting}
-constraint forall(g in 1..n_groups - 1)(
-  group_start[g + 1] = group_start[g] + group_len[g]
+constraint forall(g in 1..n_chunks - 1)(
+  chunk_start[g + 1] = chunk_start[g] + chunk_len[g]
 );
     \end{lstlisting}
 
     \vspace{0.10cm}
-    \textbf{Coverage:} the last group must end at the last box.
+    \textbf{Coverage:} the last chunk must end at the last box.
     \begin{lstlisting}
-constraint group_start[n_groups] + group_len[n_groups] - 1 = n_boxes;
+constraint chunk_start[n_chunks] + chunk_len[n_chunks] - 1 = n_boxes;
     \end{lstlisting}
 \end{frame}
 
 %------------------------------------------------
 
-\begin{frame}[fragile]{Same-Row Constraint}
-    \small
-    The domain of \(\texttt{group\_len}\) already enforces the gripper capacity.
-    The remaining geometric constraint is that each picked interval must stay inside one pallet row.
-
-    \vspace{0.15cm}
-    \textbf{Row index of the first box:}
-    \[
-        (\texttt{group\_start[g]} - 1) \; \texttt{div} \; \texttt{boxes\_along\_x}
-    \]
-
-    \vspace{0.05cm}
-    \textbf{Row index of the last box:}
-    \[
-        (\texttt{group\_start[g]} + \texttt{group\_len[g]} - 2) \; \texttt{div} \; \texttt{boxes\_along\_x}
-    \]
-
-    \vspace{0.10cm}
-    \textbf{MiniZinc implementation:} the two row indices must be equal.
-    \begin{lstlisting}
-constraint forall(g in 1..n_groups)(
-  (group_start[g] - 1) div boxes_along_x =
-  (group_start[g] + group_len[g] - 2) div boxes_along_x
-);
-    \end{lstlisting}
-\end{frame}
-
-%------------------------------------------------
-
-\begin{frame}{Grouping Example}
+\begin{frame}{Chunking Example}
     \small
     \begin{columns}[c,totalwidth=\textwidth]
-        \begin{column}{0.60\textwidth}
+        \begin{column}{\textwidth}
             \centering
-            \includegraphics[width=\linewidth,height=0.72\textheight,keepaspectratio]{sample_pallet.pdf}
-        \end{column}
-        \begin{column}{0.36\textwidth}
-            \begin{block}{Example instance}
-                \(70 \times 70\) mm boxes on an \(800 \times 400\) mm pallet give an \(11 \times 5\) grid, for \(55\) target positions.
-            \end{block}
+            \includegraphics[width=\linewidth,height=0.72\textheight,keepaspectratio]{pallet.pdf}
         \end{column}
     \end{columns}
 \end{frame}
 
 %------------------------------------------------
 
-\begin{frame}[fragile]{Scheduling Variables}
+\begin{frame}[fragile]{Placement Variables}
     \small
-    Once groups are fixed, the model assigns each group to one release step.
-    It also selects which plate opens, represented as a binary decision.
+    Chunks are released in source order (chunk \(g\) is the \(g\)-th pick).
+    The model now decides \emph{where} each chunk lands on the pallet and which plate opens during the drop.
 
-    \vspace{0.15cm}
+    \vspace{0.10cm}
+    \textbf{Pallet row:} which row each chunk is assigned to.
     \begin{lstlisting}
-array[1..n_groups] of var 1..n_groups: drop_order;
-array[1..n_groups] of var 0..1: plate;
-
-constraint alldifferent(drop_order);
+array[1..n_chunks] of var 1..boxes_along_y: y_row;
     \end{lstlisting}
 
-    \vspace{0.25cm}
-    The \(\texttt{alldifferent}\) constraint makes \(\texttt{drop\_order}\) a permutation of the release steps.
-    The value \(\texttt{plate[g]}\) selects which side must be checked for free space when group \(g\) is released.
+    \vspace{0.10cm}
+    \textbf{Starting column:} where inside the row the chunk begins.
+    \begin{lstlisting}
+array[1..n_chunks] of var 1..boxes_along_x: x_start;
+    \end{lstlisting}
+
+    \vspace{0.10cm}
+    \textbf{Opening side:} select the plate used to release each chunk.
+    \begin{lstlisting}
+array[1..n_chunks] of var 0..1: plate;
+    \end{lstlisting}
+
+    \vspace{0.10cm}
+    The value \(\texttt{plate[g]}\) determines which neighboring row must be free
+    when chunk \(g\) is released, 0 for the upper neighbor and 1 for the lower neighbor.
 \end{frame}
 
 %------------------------------------------------
 
-\begin{frame}[fragile]{Release Constraints: Internal Rows}
+\begin{frame}[fragile]{Placement Constraints}
     \small
-    For internal rows, both vertical neighbors exist.
-    If the upper side is selected, the upper neighbor must be scheduled later; if the lower side is selected, the lower neighbor must be scheduled later.
+    Three constraints together force the chunks to tile the pallet exactly:
+    each chunk stays inside its row, two chunks never share a cell, and every row
+    is filled completely.
 
-    \vspace{0.15cm}
+    \vspace{0.10cm}
+    \textbf{Row fit:} the chunk cannot run past the row's right edge.
     \begin{lstlisting}
-constraint forall(g in 1..n_groups where
-  g > groups_per_row /\ g <= n_groups - groups_per_row
-)(
-  (
-    plate[g] = 0 /\
-    drop_order[g - groups_per_row] > drop_order[g]
-  )
-  \/
-  (
-    plate[g] = 1 /\
-    drop_order[g + groups_per_row] > drop_order[g]
-  )
+constraint forall(g in 1..n_chunks)(
+  x_start[g] + chunk_len[g] - 1 <= boxes_along_x
 );
     \end{lstlisting}
-\end{frame}
 
-%------------------------------------------------
-
-\begin{frame}[fragile]{Release Constraints: Boundary Rows}
-    \small
-    The first and last pallet rows are simpler because one side is the outside of the pallet.
-    Separating boundary cases also avoids invalid array accesses.
-
-    \vspace{0.15cm}
+    \vspace{0.10cm}
+    \textbf{No overlap:} two chunks in the same row must be column-disjoint.
     \begin{lstlisting}[basicstyle=\ttfamily\tiny]
-constraint forall(g in 1..n_groups where g <= groups_per_row)(
-  plate[g] = 0 \/
-  (
-    plate[g] = 1 /\
-    drop_order[g + groups_per_row] > drop_order[g]
-  )
+constraint forall(g1, g2 in 1..n_chunks where g1 < g2)(
+  y_row[g1] != y_row[g2] \/
+  x_start[g1] + chunk_len[g1] <= x_start[g2] \/
+  x_start[g2] + chunk_len[g2] <= x_start[g1]
 );
+    \end{lstlisting}
 
-constraint forall(g in 1..n_groups where g > n_groups - groups_per_row)(
+    \vspace{0.10cm}
+    \textbf{Exact row coverage:} each pallet row is filled completely.
+    \begin{lstlisting}[basicstyle=\ttfamily\tiny]
+constraint forall(r in 1..boxes_along_y)(
+  sum(g in 1..n_chunks)(bool2int(y_row[g] = r) * chunk_len[g])
+    = boxes_along_x
+);
+    \end{lstlisting}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}[fragile]{Plate Constraint}
+    \small
+    When chunk \(g\) is dropped, the row on the side selected by \(\texttt{plate[g]}\)
+    must still be empty. Because chunks are released in source order, "still empty"
+    means any chunk that overlaps \(g\)'s column footprint in the neighboring row
+    must have a \emph{larger} index.
+
+    \vspace{0.10cm}
+    \textbf{Plate semantics:}
+    \[
+        \texttt{plate}[g] = 0 \;\Rightarrow\; \text{opens toward } \texttt{y\_row}[g] - 1
+    \]
+    \[
+        \texttt{plate}[g] = 1 \;\Rightarrow\; \text{opens toward } \texttt{y\_row}[g] + 1
+    \]
+
+    \vspace{0.10cm}
+    \textbf{MiniZinc implementation}
+    \begin{lstlisting}[basicstyle=\ttfamily\tiny]
+constraint forall(g, g2 in 1..n_chunks where g != g2)(
   (
-    plate[g] = 0 /\
-    drop_order[g - groups_per_row] > drop_order[g]
+    ( (plate[g] = 0 /\ y_row[g2] = y_row[g] - 1) \/
+      (plate[g] = 1 /\ y_row[g2] = y_row[g] + 1) )
+    /\
+    x_start[g2] < x_start[g] + chunk_len[g] /\
+    x_start[g2] + chunk_len[g2] > x_start[g]
   )
-  \/
-  plate[g] = 1
+  -> g2 > g
 );
     \end{lstlisting}
 \end{frame}
@@ -370,10 +330,10 @@ constraint forall(g in 1..n_groups where g > n_groups - groups_per_row)(
         \includegraphics[width=0.33\textwidth,height=0.32\textheight,keepaspectratio]{schedule_step_07.pdf} \\
         \scriptsize Step 1 & \scriptsize Step 4 & \scriptsize Step 7 \\[-0.05cm]
 
+        \includegraphics[width=0.33\textwidth,height=0.32\textheight,keepaspectratio]{schedule_step_09.pdf} &
         \includegraphics[width=0.33\textwidth,height=0.32\textheight,keepaspectratio]{schedule_step_10.pdf} &
-        \includegraphics[width=0.33\textwidth,height=0.32\textheight,keepaspectratio]{schedule_step_13.pdf} &
         \includegraphics[width=0.33\textwidth,height=0.32\textheight,keepaspectratio]{schedule_step_15.pdf} \\
-        \scriptsize Step 10 & \scriptsize Step 13 & \scriptsize Step 15
+        \scriptsize Step 9 & \scriptsize Step 10 & \scriptsize Step 15
     \end{tabular}
 
     \vspace{0.10cm}

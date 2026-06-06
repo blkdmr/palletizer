@@ -8,6 +8,8 @@ from minizinc import Model, Solver, Instance
 from lib.utils import gen_pallet_info
 
 
+# The 5 pallet presets act as the instance generator: running one box size
+# against all 5 presets yields 5 different instances (different n) for that pair.
 PALLET_PRESETS = {
     "europallet":   (1200, 800),
     "industrie":    (1200, 1000),
@@ -16,16 +18,18 @@ PALLET_PRESETS = {
     "australian":   (1165, 1165),
 }
 
+# 4 box-size pairs (x, y), ordered with decreasing x, y so that n_boxes
+# increases down the list. 4 pairs x 5 presets = 20 instances total.
 BOX_SIZES = [
-    (50, 50),
-    (70, 70),
-    (100, 100),
-    (120, 80),
-    (150, 150),
     (200, 200),
+    (150, 150),
+    (100, 100),
+    (50, 50),
 ]
 
-GRIP_MULTIPLIERS = [1, 2, 3]  # grip_size = k * boxes_x_dim, with k in [1, 3]
+# S (grip_size) may be at most 3 * box_x  ->  grip_size = k * boxes_x_dim, k in [1, 3].
+# Each of the 20 instances is tested under all three grip settings.
+GRIP_MULTIPLIERS = [1, 2, 3]
 
 SOLVERS = ["gecode", "chuffed",  "cp-sat", "highs"]
 
@@ -41,7 +45,6 @@ def available_solvers(names):
             print(f"[skip] solver '{name}' not available: {e}")
     return found
 
-
 def run_one(model, solver_name, box_x, box_y, pallet_x, pallet_y, grip_multiplier, timeout_s):
     pallet_info = gen_pallet_info(box_x, box_y, pallet_x, pallet_y)
     boxes_x_dim = box_x if not pallet_info["rotated"] else box_y
@@ -55,23 +58,23 @@ def run_one(model, solver_name, box_x, box_y, pallet_x, pallet_y, grip_multiplie
     instance["boxes_along_y"] = pallet_info["boxes_along_y"]
     instance["grip_size"]     = grip_size
 
-    max_pkble = (grip_size + boxes_x_dim) // boxes_x_dim
-    groups_per_row = (pallet_info["boxes_along_x"] + max_pkble - 1) // max_pkble
-    n_groups = pallet_info["boxes_along_y"] * groups_per_row
+    max_pkble      = (grip_size + boxes_x_dim) // boxes_x_dim
+    chunks_per_row = (pallet_info["boxes_along_x"] + max_pkble - 1) // max_pkble
+    n_chunks       = pallet_info["boxes_along_y"] * chunks_per_row
 
     record = {
-        "solver":         solver_name,
-        "box_x":         box_x,
-        "box_y":         box_y,
-        "pallet_x":       pallet_x,
-        "pallet_y":       pallet_y,
-        "n_boxes":        pallet_info["n_boxes"],
-        "n_groups":       n_groups,
-        "boxes_along_x":  pallet_info["boxes_along_x"],
-        "boxes_along_y":  pallet_info["boxes_along_y"],
-        "grip_size":      grip_size,
+        "solver":          solver_name,
+        "box_x":           box_x,
+        "box_y":           box_y,
+        "pallet_x":        pallet_x,
+        "pallet_y":        pallet_y,
+        "n_boxes":         pallet_info["n_boxes"],
+        "n_chunks":        n_chunks,
+        "boxes_along_x":   pallet_info["boxes_along_x"],
+        "boxes_along_y":   pallet_info["boxes_along_y"],
+        "grip_size":       grip_size,
         "grip_multiplier": grip_multiplier,
-        "timeout_s":      timeout_s,
+        "timeout_s":       timeout_s,
     }
 
     t0 = time.perf_counter()
@@ -102,27 +105,36 @@ def run_one(model, solver_name, box_x, box_y, pallet_x, pallet_y, grip_multiplie
 
 
 def main():
-    model = Model("model.mzn")
+    model = Model("satisfy.mzn")
     solvers = available_solvers(SOLVERS)
     print(f"Running solvers: {solvers}")
 
     results = []
-    total = len(PALLET_PRESETS) * len(BOX_SIZES) * len(GRIP_MULTIPLIERS) * len(solvers)
+    n_instances = len(BOX_SIZES) * len(PALLET_PRESETS)  # 4 pairs x 5 presets = 20
+    total = n_instances * len(GRIP_MULTIPLIERS) * len(solvers)
     i = 0
-    for pallet_name, (pallet_x, pallet_y) in PALLET_PRESETS.items():
-        for (box_x, box_y) in BOX_SIZES:
+    # Outer loop over box pairs (decreasing x, y -> increasing n);
+    # next loop over the 5 presets gives the 5 instances for each pair;
+    # each instance is then tested under every grip setting and solver.
+    for pair_id, (box_x, box_y) in enumerate(BOX_SIZES, start=1):
+        for instance_id, (pallet_name, (pallet_x, pallet_y)) in enumerate(PALLET_PRESETS.items(), start=1):
             for grip_mult in GRIP_MULTIPLIERS:
                 for solver_name in solvers:
                     i += 1
-                    print(f"[{i}/{total}] {solver_name} | {pallet_name} {pallet_x}x{pallet_y} | box {box_x}x{box_y} | grip x{grip_mult}")
+                    print(f"[{i}/{total}] {solver_name} | pair {pair_id} box {box_x}x{box_y} | "
+                          f"instance {instance_id} {pallet_name} {pallet_x}x{pallet_y} | grip x{grip_mult}")
                     rec = run_one(model, solver_name, box_x, box_y, pallet_x, pallet_y, grip_mult, TIMEOUT_SECONDS)
+                    rec["pair_id"]       = pair_id
+                    rec["instance_id"]   = instance_id
                     rec["pallet_preset"] = pallet_name
-                    print(f"   → status={rec['status']} wall={rec['wall_time']:.3f}s n_boxes={rec['n_boxes']} n_groups={rec['n_groups']}")
                     results.append(rec)
+                    print(f"   → status={rec['status']} wall={rec['wall_time']:.3f}s "
+                          f"n_boxes={rec['n_boxes']} n_chunks={rec['n_chunks']}")
 
     out = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "timeout_s":    TIMEOUT_SECONDS,
+        "n_instances":  n_instances,
         "solvers":      solvers,
         "pallet_presets": {k: {"x": v[0], "y": v[1]} for k, v in PALLET_PRESETS.items()},
         "box_sizes":   [{"x": x, "y": y} for (x, y) in BOX_SIZES],

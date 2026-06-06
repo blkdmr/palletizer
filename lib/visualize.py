@@ -5,20 +5,26 @@ import matplotlib.patches as patches
 from matplotlib import cm
 
 
-def _box_xy(box_idx, boxes_along_x, cell_w, cell_h):
-    col = (box_idx - 1) % boxes_along_x
-    row = (box_idx - 1) // boxes_along_x
-    return col * cell_w, row * cell_h
+def _cell_xy(y_row, x_col, cell_w, cell_h):
+    """Pixel coords of the top-left of pallet cell (x_col, y_row). 1-indexed."""
+    return (x_col - 1) * cell_w, (y_row - 1) * cell_h
 
 
 def _group_color(g_idx):
     return cm.tab20(g_idx % 20)
 
 
-def _draw_boxes(ax, groups, placed_set, current_idx, boxes_along_x, cell_w, cell_h):
+def _group_bbox(y_row, x_start, length, cell_w, cell_h):
+    x0, y0 = _cell_xy(y_row, x_start, cell_w, cell_h)
+    return x0, y0, length * cell_w, cell_h
+
+
+def _draw_boxes(ax, groups, placements, placed_set, current_idx, cell_w, cell_h):
+    """placements[g] = (y_row, x_start) for group g (0-indexed)."""
     for g_idx, group in enumerate(groups):
-        for box in group:
-            x, y = _box_xy(box, boxes_along_x, cell_w, cell_h)
+        y_row, x_start = placements[g_idx]
+        for offset, box in enumerate(group):
+            x, y = _cell_xy(y_row, x_start + offset, cell_w, cell_h)
             if g_idx in placed_set or g_idx == current_idx:
                 color = _group_color(g_idx)
                 alpha = 0.75
@@ -31,37 +37,33 @@ def _draw_boxes(ax, groups, placed_set, current_idx, boxes_along_x, cell_w, cell
             ))
 
 
-def _group_bbox(group, boxes_along_x, cell_w, cell_h):
-    first, last = group[0], group[-1]
-    x0, y0 = _box_xy(first, boxes_along_x, cell_w, cell_h)
-    x1, _  = _box_xy(last,  boxes_along_x, cell_w, cell_h)
-    return x0, y0, (x1 + cell_w) - x0, cell_h
-
-
 def render_pallet(solution, out_path):
     """Render the full pallet, colored by group, with group labels."""
     px = solution["boxes_along_x"]
     py = solution["boxes_along_y"]
     cw = solution["cell_w"]
     ch = solution["cell_h"]
-    groups = solution["groups"]
+    groups     = solution["groups"]
+    placements = solution["placements"]
 
     width_in  = 10
     height_in = max(3.0, width_in * (py * ch) / (px * cw))
     fig, ax = plt.subplots(figsize=(width_in, height_in))
 
-    _draw_boxes(ax, groups, placed_set=set(range(len(groups))),
-                current_idx=-1, boxes_along_x=px, cell_w=cw, cell_h=ch)
+    _draw_boxes(ax, groups, placements,
+                placed_set=set(range(len(groups))),
+                current_idx=-1, cell_w=cw, cell_h=ch)
 
     for g_idx, group in enumerate(groups):
-        x0, y0, w, h = _group_bbox(group, px, cw, ch)
+        y_row, x_start = placements[g_idx]
+        x0, y0, w, h = _group_bbox(y_row, x_start, len(group), cw, ch)
         ax.add_patch(patches.Rectangle(
             (x0, y0), w, h, linewidth=2.0, edgecolor="black", facecolor="none"
         ))
         ax.text(x0 + w/2, y0 + h/2, f"G{g_idx + 1}",
                 ha="center", va="center", fontsize=11, fontweight="bold")
-        for box in group:
-            x, y = _box_xy(box, px, cw, ch)
+        for offset, box in enumerate(group):
+            x, y = _cell_xy(y_row, x_start + offset, cw, ch)
             ax.text(x + cw*0.92, y + ch*0.92, str(box),
                     ha="right", va="bottom", fontsize=6, color="black", alpha=0.6)
 
@@ -81,9 +83,9 @@ def render_schedule(solution, out_path):
     py = solution["boxes_along_y"]
     cw = solution["cell_w"]
     ch = solution["cell_h"]
-    groups   = solution["groups"]
-    schedule = solution["schedule"]
-    n_steps  = len(schedule)
+    groups     = solution["groups"]
+    placements = solution["placements"]
+    schedule   = solution["schedule"]
 
     cell_aspect = (py * ch) / (px * cw)
     sub_w = 6.0
@@ -95,11 +97,13 @@ def render_schedule(solution, out_path):
     placed = set()
     for step in schedule:
         cur_g = step["group_index"] - 1
+        y_row, x_start = placements[cur_g]
+        length = len(groups[cur_g])
 
         fig, ax = plt.subplots(figsize=(sub_w, sub_w * cell_aspect))
-        _draw_boxes(ax, groups, placed, cur_g, px, cw, ch)
+        _draw_boxes(ax, groups, placements, placed, cur_g, cw, ch)
 
-        x0, y0, w, h = _group_bbox(groups[cur_g], px, cw, ch)
+        x0, y0, w, h = _group_bbox(y_row, x_start, length, cw, ch)
         ax.add_patch(patches.Rectangle(
             (x0, y0), w, h, linewidth=2.5, edgecolor="red", facecolor="none"
         ))
