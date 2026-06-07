@@ -44,7 +44,7 @@ def load_results(path):
             "pallet":         r["pallet_preset"],
             "box":           f"{r['box_x']}x{r['box_y']}",
             "n_boxes":        r["n_boxes"],
-            "n_groups":       r["n_groups"],
+            "n_chunks":       r["n_chunks"],
             "box_x":          r["box_x"],
             "box_y":          r["box_y"],
             "grip_size":      r["grip_size"],
@@ -247,7 +247,7 @@ def main():
     print(f"Loaded {len(rows)} successful runs ({skipped} ERROR rows skipped)")
     print(f"Solvers: {sorted(solvers)}")
 
-    valid_axes = {"n_boxes", "n_groups", "box_x", "box_y"}
+    valid_axes = {"n_boxes", "n_chunks", "box_x", "box_y"}
     if X_AXIS not in valid_axes:
         raise SystemExit(f"X_AXIS must be one of {valid_axes}, got {X_AXIS!r}")
 
