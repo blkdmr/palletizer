@@ -1,0 +1,90 @@
+\section{Placement}
+\label{sec:placement}
+
+Once the chunks have been defined, the model must decide where each chunk is
+placed on the pallet. More precisely, for each chunk it must choose the pallet
+row on which the chunk is dropped and the horizontal position at which the chunk
+starts. This is represented by two decision variables:
+
+\vspace{0.5cm}
+\begin{lstlisting}
+array[1..n_chunks] of var 1..boxes_along_y: y_row;
+array[1..n_chunks] of var 1..boxes_along_x: x_start;
+\end{lstlisting}
+\vspace{0.5cm}
+
+The variable \texttt{y\_row[g]} denotes the row assigned to chunk \(g\), while
+\texttt{x\_start[g]} denotes the column where that chunk begins.
+
+A first requirement is that every chunk must fit within the horizontal limits of
+the pallet. Since chunk \(g\) starts at column \texttt{x\_start[g]} and has
+length \texttt{chunk\_len[g]}, its last occupied column is
+\texttt{x\_start[g] + chunk\_len[g] - 1}. This position must not exceed the
+number of columns available on the pallet:
+
+\vspace{0.5cm}
+\begin{lstlisting}
+constraint forall(g in 1..n_chunks)(
+  x_start[g] + chunk_len[g] - 1 <= boxes_along_x
+);
+\end{lstlisting}
+\vspace{0.5cm}
+
+The second requirement is that two chunks must not occupy the same pallet cells.
+Each chunk can be seen as a horizontal rectangle of height \(1\): it starts at
+\((\texttt{x\_start[g]}, \texttt{y\_row[g]})\), has width
+\texttt{chunk\_len[g]}, and has height \(1\). Therefore, the non-overlap
+condition can be expressed directly using the global constraint
+\texttt{diffn}:
+
+\vspace{0.5cm}
+\begin{lstlisting}
+include "globals.mzn";   % for diffn
+
+constraint diffn(x_start, y_row, chunk_len, [1 | g in 1..n_chunks]);
+\end{lstlisting}
+\vspace{0.5cm}
+
+The constraint \texttt{diffn(x, y, dx, dy)} enforces that the rectangles
+defined by origins \((\texttt{x[i]}, \texttt{y[i]})\) and dimensions
+\((\texttt{dx[i]}, \texttt{dy[i]})\) do not overlap. In this model, all
+rectangles have height \(1\), so \texttt{diffn} ensures that chunks assigned to
+the same row occupy disjoint horizontal intervals.
+
+Together with the chunking constraints, these placement constraints already
+define a valid pallet layout. The chunking constraints ensure that all
+\texttt{n\_boxes} boxes are assigned to chunks, while the placement constraints
+ensure that those chunks fit inside the pallet and do not overlap.
+
+However, one useful structural property is still only implicit: each pallet row
+must receive exactly \texttt{chunks\_per\_row} chunks. This follows from the
+parameter identity
+\[
+\texttt{n\_chunks}
+=
+\texttt{boxes\_along\_y} \cdot \texttt{chunks\_per\_row},
+\]
+combined with the non-overlap and capacity constraints. Nevertheless, leaving
+this property implicit makes the solver discover it through search.
+
+To make this information explicit, the model adds a global cardinality
+constraint:
+
+\vspace{0.5cm}
+\begin{lstlisting}
+constraint global_cardinality(
+  y_row,
+  [r | r in 1..boxes_along_y],
+  [chunks_per_row | r in 1..boxes_along_y]
+);
+\end{lstlisting}
+\vspace{0.5cm}
+
+The constraint \texttt{global\_cardinality(arr, vals, counts)} enforces that
+each value \texttt{vals[i]} appears in \texttt{arr} exactly
+\texttt{counts[i]} times. In this case, every pallet row from \(1\) to
+\texttt{boxes\_along\_y} must appear exactly \texttt{chunks\_per\_row} times
+in \texttt{y\_row}. As a result, the solver knows from the beginning how many
+chunks must be assigned to each row. Once a row has received the required number
+of chunks, no further chunks can be placed there, which reduces unnecessary
+branching during search.

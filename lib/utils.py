@@ -16,8 +16,8 @@ def gen_pallet_info(box_x: int, box_y: int, pallet_x: int, pallet_y: int):
             "n_boxes": b_count,
             "pallet_x_size": b_used_x,
             "pallet_y_size": b_used_y,
-            "boxes_along_x": b_cols,
-            "boxes_along_y": b_rows,
+            "boxes_per_row": b_cols,
+            "pallet_rows": b_rows,
             "rotated": True,
         }
 
@@ -25,7 +25,7 @@ def gen_pallet_info(box_x: int, box_y: int, pallet_x: int, pallet_y: int):
         "n_boxes": a_count,
         "pallet_x_size": a_used_x,
         "pallet_y_size": a_used_y,
-        "boxes_along_x": a_cols,
-        "boxes_along_y": a_rows,
+        "boxes_per_row": a_cols,
+        "pallet_rows": a_rows,
         "rotated": False,
     }

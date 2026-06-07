@@ -6,58 +6,46 @@ belt direction and \(y\) is orthogonal to it.
 A target pallet capable of containing \(n\) boxes is given.
 Each box \(i\) has a destination position on the pallet, given by 
 $(P_x[i], P_y[i])$, where $i = 1,\ldots,n$. 
-
 The robot can pick a consecutive set of boxes from the stream. Since boxes
 on the belt have no gaps between them, each picked set is contiguous
 along the \(x\)-axis. Given a gripper size \(S\), the total length of the
 picked set must be at most \(S+x\). This corresponds to an overflow of at
 most \(x/2\) on each side of the gripper. Therefore, the maximum number
 of boxes that can be picked at once is $\left\lfloor \frac{S+x}{x} \right\rfloor$.
-
 After picking a set of boxes, the robot releases it on the pallet.
-Figure~\ref{fig:picking_releasing} shows an example of the picking
-and releasing operations.
 
-\begin{figure}[h]
-    \centering
-    \includegraphics[width=0.75\textwidth]{figures/pick_and_release.pdf}
-    \caption{Example of picking and releasing operations.}
-    \label{fig:picking_releasing}
-\end{figure}
 The gripper has two parallel plates, but only one plate can move during
 release. For this reason, the opening side must be free. It can face either
 the outside of the pallet or a position that has not been filled yet.
 We split the problem into two parts:
 \begin{enumerate}
-    \item \textbf{Grouping.} Identify the sets of boxes that can be picked
-    together. Each group must contain boxes on the same row, aligned along
+    \item \textbf{Chunking.} Identify the sets of boxes that can be picked
+    together. Each chunk must contain boxes on the same row, aligned along
     the \(x\)-axis, and must fit within the gripper capacity.
 
-    \item \textbf{Scheduling.} Choose the order in which the groups are
-    released. For each group, also choose which plate opens. At every step,
+    \item \textbf{Placement.} Choose the positions in which the chunks are
+    released. For each chunk, also choose which plate opens. At every step,
     the selected opening side must be free.
 \end{enumerate}
 The goal is to find a sequence of pick-and-release actions that places all
 boxes in their target positions while respecting the gripper capacity
-and avoiding collisions during release. The code used for the model
-and the benchmark instances is available at \url{...}.
+and avoiding collisions during release.
 
 \subsection{Parameters and Derived Constants}
 
 The proposed MiniZinc model uses five input parameters. The parameter
-\texttt{n\_boxes} denotes the total number of boxes in the layer.
-The parameters \texttt{boxes\_along\_x} and \texttt{boxes\_along\_y}
-define the grid dimensions of the layer. The parameter
-\texttt{boxes\_x\_dim} denotes the box dimension parallel to the gripper.
-In the natural orientation, this corresponds to \(x\); if the layer is
-rotated, it corresponds to \(y\). Finally, \texttt{grip\_size} denotes
-the gripper size \(S\). These parameters are declared as follows:
+\texttt{n\_boxes} denotes the total number of boxes on the pallet.
+The parameter \texttt{boxes\_per\_row} denotes the number of boxes in each
+row, and \texttt{pallet\_rows} denotes the number of rows on the pallet.
+The parameter \texttt{boxes\_x\_dim} denotes the box dimension parallel to
+the gripper. Finally, \texttt{grip\_size} denotes the gripper size \(S\). These
+parameters are declared as follows:
 \vspace{0.5cm}
 \begin{lstlisting}
 par int: n_boxes;
 par int: boxes_x_dim;
-par int: boxes_along_x;
-par int: boxes_along_y;
+par int: boxes_per_row;
+par int: pallet_rows;
 par int: grip_size;
 \end{lstlisting}
 \vspace{0.5cm}
@@ -72,32 +60,32 @@ maximum number of boxes that can be picked in a single operation, computed as:
     \right\rfloor .
 \]
 This value derives directly from the gripper capacity \(S+x\). The second
-constant is the number of groups needed to cover one pallet row:
+constant is the number of chunks needed to cover one pallet row:
 \[
-    \texttt{groups\_per\_row}
+    \texttt{chunks\_per\_row}
     =
     \left\lceil
-    \frac{\texttt{boxes\_along\_x}}
+    \frac{\texttt{boxes\_per\_row}}
          {\texttt{max\_pkble\_boxes}}
     \right\rceil .
 \]
-This is a ceiling division because the last group in a row may contain fewer
-boxes than the maximum allowed number. The third constant is the total number of groups:
+This is a ceiling division because the last chunk in a row may contain fewer
+boxes than the maximum allowed number. The third constant is the total number of chunks:
 \[
-    \texttt{n\_groups}
+    \texttt{n\_chunks}
     =
-    \texttt{boxes\_along\_y}
+    \texttt{pallet\_rows}
     \cdot
-    \texttt{groups\_per\_row}.
+    \texttt{chunks\_per\_row}.
 \]
-It is obtained by multiplying the number of groups per row by the number of
+It is obtained by multiplying the number of chunks per row by the number of
 rows. The corresponding MiniZinc declarations are:
 \vspace{0.5cm}
 \begin{lstlisting}
 par int: max_pkble_boxes = (grip_size + boxes_x_dim) div boxes_x_dim;
 
-par int: groups_per_row = (boxes_along_x + max_pkble_boxes - 1)
+par int: chunks_per_row = (boxes_per_row + max_pkble_boxes - 1)
                            div max_pkble_boxes;
 
-par int: n_groups = boxes_along_y * groups_per_row;
+par int: n_chunks = pallet_rows * chunks_per_row;
 \end{lstlisting}

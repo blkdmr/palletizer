@@ -1,0 +1,85 @@
+\section{Search Strategy}
+\label{sec:search}
+
+\subsection{Default search}
+
+The initial model relies on MiniZinc's default search:
+
+\vspace{0.5cm}
+\begin{lstlisting}
+solve satisfy;
+\end{lstlisting}
+\vspace{0.5cm}
+
+With no annotation, the solver applies a generic variable- and
+value-selection heuristic (typically first-fail on the smallest domain,
+\texttt{indomain\_min} on values) over all decision variables in the
+model. Given that \texttt{chunk\_len}, \texttt{chunk\_start},
+\texttt{y\_row}, \texttt{x\_start}, and \texttt{plate} are tightly coupled
+through the geometric and collision constraints, the resulting search
+tree quickly becomes large.
+
+\subsection{Constructive branching}
+
+The refined model exploits a property of the problem: the chunks can be
+placed row by row, bottom to top, each one as long as the gripper allows
+and aligned to the left of the still-empty portion of its row. Under this
+plan, the row above each new chunk is already full, so the collision rule
+forces the plate to open downward into the still-empty rows below, where
+no collision is possible. The plan is therefore feasible by construction,
+and a search strategy that visits the decision variables in this order
+finds a solution with essentially no backtracking.
+
+The search must interleave four decisions per chunk
+(\texttt{y\_row[g]}, \texttt{chunk\_len[g]}, \texttt{x\_start[g]},
+\texttt{plate[g]}), but a single \texttt{int\_search} annotation visits
+one array in index order and applies a single value-selection rule. To
+combine the four decisions, the model channels them into a single
+\texttt{branch} array, laid out in blocks of four per chunk:
+
+\vspace{0.5cm}
+\begin{lstlisting}
+par int: branch_ub = max([boxes_along_y, boxes_along_x, max_pkble_boxes]);
+
+array[1..4*n_chunks] of var 0..branch_ub: branch;
+
+constraint forall(g in 1..n_chunks)(
+  branch[4*g-3] = y_row[g]                       /\
+  branch[4*g-2] = max_pkble_boxes - chunk_len[g] /\
+  branch[4*g-1] = x_start[g]                     /\
+  branch[4*g]   = 1 - plate[g]
+);
+
+solve :: int_search(branch, input_order, indomain_min)
+      satisfy;
+\end{lstlisting}
+\vspace{0.5cm}
+
+The four entries per chunk are ordered to reflect the constructive plan:
+row, length, column, plate. Since \texttt{indomain\_min} always selects
+the smallest available value, two of the four decisions are channelled in
+complemented form so that the same rule produces the desired extremum.
+The entry \texttt{max\_pkble\_boxes - chunk\_len[g]} is minimised when
+\texttt{chunk\_len[g]} is maximised, yielding the longest pick the
+gripper allows; the entry \texttt{1 - plate[g]} is minimised when
+\texttt{plate[g] = 1}, selecting the downward plate. The two
+non-complemented entries directly produce the smallest row and the
+leftmost column.
+
+The variable \texttt{chunk\_start} does not appear in the \texttt{branch}
+array. The prefix-sum constraints introduced in
+Section~\ref{sec:model} make it a deterministic function of the chunk
+lengths, so the search can leave it to propagation alone and avoid
+exploring redundant assignments of belt positions.
+
+An example of the result of the chunking phase is shown in
+Figure~\ref{fig:sample-pallet}.
+\begin{figure}[t!]
+  \centering
+  \includegraphics[width=0.65\linewidth]{figures/pallet.pdf}
+  \caption{Example pallet layout generated for $70 \times 70$ boxes on an
+  $800 \times 1200$ pallet. The resulting $11 \times 17$ grid contains
+  $187$ boxes. The grip size is set to three box widths.
+  Chunks alternate $3$/$4$/$4$ across each row.}
+  \label{fig:sample-pallet}
+\end{figure}

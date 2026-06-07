@@ -39,8 +39,8 @@ def _draw_boxes(ax, groups, placements, placed_set, current_idx, cell_w, cell_h)
 
 def render_pallet(solution, out_path):
     """Render the full pallet, colored by group, with group labels."""
-    px = solution["boxes_along_x"]
-    py = solution["boxes_along_y"]
+    px = solution["boxes_per_row"]
+    py = solution["pallet_rows"]
     cw = solution["cell_w"]
     ch = solution["cell_h"]
     groups     = solution["groups"]
@@ -79,8 +79,8 @@ def render_pallet(solution, out_path):
 
 def render_schedule(solution, out_path):
     """Render the step-by-step drop schedule as one PDF per step."""
-    px = solution["boxes_along_x"]
-    py = solution["boxes_along_y"]
+    px = solution["boxes_per_row"]
+    py = solution["pallet_rows"]
     cw = solution["cell_w"]
     ch = solution["cell_h"]
     groups     = solution["groups"]

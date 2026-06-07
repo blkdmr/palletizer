@@ -105,7 +105,7 @@ def run_one(model, solver_name, box_x, box_y, pallet_x, pallet_y, grip_multiplie
 
 
 def main():
-    model = Model("satisfy.mzn")
+    model = Model("model.mzn")
     solvers = available_solvers(SOLVERS)
     print(f"Running solvers: {solvers}")
 

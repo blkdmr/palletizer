@@ -20,18 +20,18 @@ def solve_instance(box_x, box_y, pallet_x, pallet_y, solver_name="gecode"):
     boxes_x_dim = box_x if not pallet_info["rotated"] else box_y
     grip_size = 3 * boxes_x_dim
 
-    model = Model("satisfy.mzn")
+    model = Model("model.mzn")
     solver = Solver.lookup(solver_name)
     instance = Instance(solver, model)
 
     instance["n_boxes"] = pallet_info["n_boxes"]
     instance["boxes_x_dim"] = boxes_x_dim
-    instance["boxes_along_x"] = pallet_info["boxes_along_x"]
-    instance["boxes_along_y"] = pallet_info["boxes_along_y"]
+    instance["boxes_per_row"] = pallet_info["boxes_per_row"]
+    instance["pallet_rows"] = pallet_info["pallet_rows"]
     instance["grip_size"] = grip_size
 
     print(f"Solving with {solver_name}: {pallet_info['n_boxes']} boxes in "
-          f"{pallet_info['boxes_along_x']}x{pallet_info['boxes_along_y']} grid "
+          f"{pallet_info['boxes_per_row']}x{pallet_info['pallet_rows']} grid "
           f"(rotated={pallet_info['rotated']})")
 
     result = instance.solve()
@@ -45,6 +45,8 @@ def solve_instance(box_x, box_y, pallet_x, pallet_y, solver_name="gecode"):
     groups = [list(range(s, s + l)) for s, l in zip(chunk_start, chunk_len)]
     placements = list(zip(y_row_vals, x_start_vals))
 
+    # The belt is FIFO: pick g is released at step g, so the schedule order is
+    # the chunk index itself.
     schedule = [
         {
             "step": g + 1,
@@ -65,8 +67,8 @@ def solve_instance(box_x, box_y, pallet_x, pallet_y, solver_name="gecode"):
         "groups": groups,
         "schedule": schedule,
         "placements": placements,
-        "boxes_along_x": pallet_info["boxes_along_x"],
-        "boxes_along_y": pallet_info["boxes_along_y"],
+        "boxes_per_row": pallet_info["boxes_per_row"],
+        "pallet_rows": pallet_info["pallet_rows"],
         "cell_w": cell_w,
         "cell_h": cell_h,
         "rotated": pallet_info["rotated"],

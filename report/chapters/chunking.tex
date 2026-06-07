@@ -1,0 +1,83 @@
+\section{Chunking}
+\label{sec:model}
+This part of the model admits several possible encodings. A natural but
+expensive formulation is a \emph{fully enumerated} encoding, where each chunk
+explicitly stores the identifiers of all boxes it contains. Since chunks may
+have different lengths, this representation requires a two-dimensional
+array with padding values for shorter chunks.
+\vspace{0.5cm}
+\begin{lstlisting}
+array[1..n_chunks, 1..max_pkble_boxes] of var 0..n_boxes: chunks;
+\end{lstlisting}
+\vspace{0.5cm}
+Here, the value \(0\) is used as a dummy value to represent an empty slot.
+This representation makes chunk membership explicit and easy to inspect.
+However, it introduces a large number of decision variables and requires
+additional constraints to enforce the structure of a valid solution: each
+box must appear exactly once, and the non-empty positions inside each
+chunk must be ordered.
+
+A second possibility is a \emph{binary assignment} encoding, where a boolean
+variable states whether box \(i\) belongs to chunk \(g\). This representation
+can be written as follows:
+
+\vspace{0.5cm}
+\begin{lstlisting}
+array[1..n_chunks, 1..n_boxes] of var bool: belongs_to_chunk;
+\end{lstlisting}
+\vspace{0.5cm}
+In this case, chunk membership is represented by the truth value of
+\texttt{belongs\_to\_chunk[g,i]}. Although this encoding is expressive, it
+is even larger than the fully enumerated representation, and it does not
+encode contiguity directly: that property must be reconstructed through
+additional constraints.
+
+For this reason, the adopted model represents each chunk using its
+\emph{start index} and \emph{length}. An equivalent formulation could use
+the start and end indices instead. This interval-style representation is
+more compact because each chunk is described by only two variables, and
+contiguity is implicit: once the start index and the length are known,
+the boxes in the chunk are uniquely determined. As a result, the model
+avoids explicit membership variables and reduces the number of constraints
+needed to describe valid chunks.
+
+\vspace{0.5cm}
+\begin{lstlisting}
+array[1..n_chunks] of var 1..n_boxes: chunk_start;
+array[1..n_chunks] of var 1..max_pkble_boxes: chunk_len;
+\end{lstlisting}
+\vspace{0.5cm}
+The adopted encoding uses two arrays: \texttt{chunk\_start}, which stores
+the first box of each chunk, and \texttt{chunk\_len}, which stores the
+number of boxes in that chunk.
+
+The following constraints define the position of each chunk in the input
+stream.
+
+\begin{lstlisting}
+constraint chunk_start[1] = 1;
+\end{lstlisting}
+
+The first constraint sets the start of the first chunk to box \(1\). This fixes
+the beginning of the chunk sequence and ensures that the partition starts from
+the first box.
+
+\begin{lstlisting}
+constraint forall(g in 1..n_chunks - 1)(
+  chunk_start[g + 1] = chunk_start[g] + chunk_len[g]
+);
+\end{lstlisting}
+
+The second constraint makes the chunks consecutive. For each chunk \(g\), the
+next chunk starts immediately after it, since the start position of chunk
+\(g+1\) is obtained by adding the length of chunk \(g\) to
+\texttt{chunk\_start[g]}. This prevents gaps and overlaps between adjacent
+chunks.
+
+\begin{lstlisting}
+constraint chunk_start[n_chunks] + chunk_len[n_chunks] - 1 = n_boxes;
+\end{lstlisting}
+
+The final constraint forces the last chunk to end exactly at box
+\texttt{n\_boxes}. Together, these constraints ensure that the chunks form a
+complete partition of the input stream, where every box is covered exactly once.
