@@ -63,15 +63,15 @@ the beginning of the chunk sequence and ensures that the partition starts from
 the first box.
 
 \begin{lstlisting}
-constraint forall(g in 1..n_chunks - 1)(
-  chunk_start[g + 1] = chunk_start[g] + chunk_len[g]
+constraint forall(n in 1..n_chunks - 1)(
+  chunk_start[n + 1] = chunk_start[n] + chunk_len[n]
 );
 \end{lstlisting}
 
-The second constraint makes the chunks consecutive. For each chunk \(g\), the
+The second constraint makes the chunks consecutive. For each chunk \(n\), the
 next chunk starts immediately after it, since the start position of chunk
-\(g+1\) is obtained by adding the length of chunk \(g\) to
-\texttt{chunk\_start[g]}. This prevents gaps and overlaps between adjacent
+\(n+1\) is obtained by adding the length of chunk \(n\) to
+\texttt{chunk\_start[n]}. This prevents gaps and overlaps between adjacent
 chunks.
 
 \begin{lstlisting}

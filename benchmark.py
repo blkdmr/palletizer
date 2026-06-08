@@ -54,13 +54,13 @@ def run_one(model, solver_name, box_x, box_y, pallet_x, pallet_y, grip_multiplie
     instance = Instance(solver, model)
     instance["n_boxes"]       = pallet_info["n_boxes"]
     instance["boxes_x_dim"]   = boxes_x_dim
-    instance["boxes_along_x"] = pallet_info["boxes_along_x"]
-    instance["boxes_along_y"] = pallet_info["boxes_along_y"]
+    instance["boxes_per_row"] = pallet_info["boxes_per_row"]
+    instance["pallet_rows"] = pallet_info["pallet_rows"]
     instance["grip_size"]     = grip_size
 
     max_pkble      = (grip_size + boxes_x_dim) // boxes_x_dim
-    chunks_per_row = (pallet_info["boxes_along_x"] + max_pkble - 1) // max_pkble
-    n_chunks       = pallet_info["boxes_along_y"] * chunks_per_row
+    chunks_per_row = (pallet_info["boxes_per_row"] + max_pkble - 1) // max_pkble
+    n_chunks       = pallet_info["pallet_rows"] * chunks_per_row
 
     record = {
         "solver":          solver_name,
@@ -70,8 +70,8 @@ def run_one(model, solver_name, box_x, box_y, pallet_x, pallet_y, grip_multiplie
         "pallet_y":        pallet_y,
         "n_boxes":         pallet_info["n_boxes"],
         "n_chunks":        n_chunks,
-        "boxes_along_x":   pallet_info["boxes_along_x"],
-        "boxes_along_y":   pallet_info["boxes_along_y"],
+        "boxes_per_row":   pallet_info["boxes_per_row"],
+        "pallet_rows":   pallet_info["pallet_rows"],
         "grip_size":       grip_size,
         "grip_multiplier": grip_multiplier,
         "timeout_s":       timeout_s,

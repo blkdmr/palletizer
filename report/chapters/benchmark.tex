@@ -164,37 +164,3 @@ instances are smaller, so the differences are less pronounced.
   \label{fig:scaling-per-pallet}
 
 \end{figure}
-
-\subsection{Flattening and execution overhead}
-
-The last analysis compares the solver-reported time with the total runtime
-measured by the Python benchmark script. This comparison estimates the cost of
-the steps that occur before the actual solver search. The main one is
-MiniZinc flattening: in this phase, the high-level MiniZinc model and the
-instance data are translated into a lower-level FlatZinc representation, which
-is then passed to the selected backend solver. The remaining overhead includes
-Python instance construction, MiniZinc invocation, and process startup.
-
-Figure~\ref{fig:wall-vs-solve} shows the resulting comparison. The diagonal line
-marks equal total runtime and solver-reported time. Points close to the diagonal
-correspond to runs where most of the time is spent inside the solver. Points
-above the diagonal instead indicate a larger overhead outside the solver; in
-these cases, flattening and execution costs are more relevant relative to the
-actual solving time.
-
-The plot shows that this effect is strongest for the fastest runs, especially
-for \texttt{gecode} and several \texttt{chuffed} executions. Their
-solver-reported time is very small, so even a modest overhead produces a
-visible separation from the diagonal. For slower runs, especially
-\texttt{highs} and the larger \texttt{cp-sat} instances, the points are closer
-to the diagonal. In those cases, the solving phase dominates the total runtime,
-and the relative overhead becomes less important.
-
-\begin{figure}[t]
-  \centering
-  \includegraphics[width=0.75\linewidth]{figures/wall_vs_solve.pdf}
-  \caption{Execution time compared with solver-reported solve time. The diagonal
-  marks equal values; points above it indicate additional overhead before or
-  around the solver call. Both axes use a logarithmic scale.}
-  \label{fig:wall-vs-solve}
-\end{figure}

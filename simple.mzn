@@ -35,7 +35,7 @@ constraint forall(g in 1..n_chunks)(
 % no two chunks overlap on the pallet grid
 constraint forall(g1, g2 in 1..n_chunks where g1 < g2)(
   y_row[g1] != y_row[g2]                              \/
-  x_start[g1] + chunk_len[g1] <= x_start[g2]          \/
+  x_start[g1] + chunk_len[g1] <= cx_start[g2]          \/
   x_start[g2] + chunk_len[g2] <= x_start[g1]
 );
 

@@ -12,14 +12,11 @@ solve satisfy;
 \vspace{0.5cm}
 
 With no annotation, the solver applies a generic variable- and
-value-selection heuristic (typically first-fail on the smallest domain,
-\texttt{indomain\_min} on values) over all decision variables in the
+value-selection heuristic over all decision variables in the
 model. Given that \texttt{chunk\_len}, \texttt{chunk\_start},
 \texttt{y\_row}, \texttt{x\_start}, and \texttt{plate} are tightly coupled
 through the geometric and collision constraints, the resulting search
 tree quickly becomes large.
-
-\subsection{Constructive branching}
 
 The refined model exploits a property of the problem: the chunks can be
 placed row by row, bottom to top, each one as long as the gripper allows
@@ -43,11 +40,11 @@ par int: branch_ub = max([boxes_along_y, boxes_along_x, max_pkble_boxes]);
 
 array[1..4*n_chunks] of var 0..branch_ub: branch;
 
-constraint forall(g in 1..n_chunks)(
-  branch[4*g-3] = y_row[g]                       /\
-  branch[4*g-2] = max_pkble_boxes - chunk_len[g] /\
-  branch[4*g-1] = x_start[g]                     /\
-  branch[4*g]   = 1 - plate[g]
+constraint forall(n in 1..n_chunks)(
+  branch[4*n-3] = y_row[n]                       /\
+  branch[4*n-2] = max_pkble_boxes - chunk_len[n] /\
+  branch[4*n-1] = x_start[n]                     /\
+  branch[4*n]   = 1 - plate[n]
 );
 
 solve :: int_search(branch, input_order, indomain_min)
