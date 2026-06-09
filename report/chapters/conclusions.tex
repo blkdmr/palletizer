@@ -1,15 +1,15 @@
 \section{Conclusions}
 
 The project shows that the robot movement planning problem can be modeled
-compactly by separating grouping and scheduling decisions. The interval
-representation of groups, based on start index and length, avoids larger
+compactly by separating chunking and placement decisions. The interval
+representation of chunks, based on start index and length, avoids larger
 membership-based encodings while still capturing the gripper constraints. The
-release order is then handled through ordering variables and local neighborhood
-constraints.
+release order is then handled through a permutation variable and local
+neighborhood constraints on the plate direction.
 
 The benchmark shows that the CP-oriented solvers are the most effective on the
 tested instances. \texttt{gecode} is the most stable solver, while
 \texttt{cp-sat} and \texttt{chuffed} remain competitive. In contrast,
 \texttt{highs} is consistently slower on this combinatorial formulation. Larger
-grippers reduce the number of groups and generally improve runtime, while dense
+grippers reduce the number of chunks and generally improve runtime, while dense
 layouts with many small boxes remain the hardest cases.

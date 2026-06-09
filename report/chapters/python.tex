@@ -7,21 +7,23 @@ loads the model and selects the solver:
 \vspace{0.3cm}
 \begin{lstlisting}[language=Python]
 model    = Model("model.mzn")
-solver   = Solver.lookup("gecode")
+solver   = Solver.lookup(solver_name)
 instance = Instance(solver, model)
 \end{lstlisting}
 \vspace{0.3cm}
+
 It then sets the instance parameters:
 
 \vspace{0.3cm}
 \begin{lstlisting}[language=Python]
 instance["n_boxes"]       = pallet_info["n_boxes"]
 instance["boxes_x_dim"]   = boxes_x_dim
-instance["boxes_along_x"] = pallet_info["boxes_along_x"]
-instance["boxes_along_y"] = pallet_info["boxes_along_y"]
+instance["boxes_per_row"] = pallet_info["boxes_per_row"]
+instance["pallet_rows"]   = pallet_info["pallet_rows"]
 instance["grip_size"]     = grip_size
 \end{lstlisting}
 \vspace{0.3cm}
+
 After the parameters are set, the script calls the solver:
 
 \vspace{0.3cm}
@@ -29,6 +31,9 @@ After the parameters are set, the script calls the solver:
 result = instance.solve()
 \end{lstlisting}
 \vspace{0.3cm}
-The output arrays \texttt{group\_start}, \texttt{group\_len},
-\texttt{drop\_order}, and \texttt{plate} are then read from the \texttt{result} map. They give
-the grouping of the boxes and the release schedule.
+
+The output arrays \texttt{chunk\_start}, \texttt{chunk\_len},
+\texttt{plate}, \texttt{y\_row}, and \texttt{x\_start} are then read from the
+\texttt{result} map. They give the grouping of the boxes, the target placement
+of each group, and the release schedule. Since the belt is FIFO, the release
+order is given directly by the chunk index.

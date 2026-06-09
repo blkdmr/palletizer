@@ -55,9 +55,7 @@ Table~\ref{tab:bench-packs}.
       \toprule\arraybackslash\textbf{Box size (mm)} \\
       \midrule
       \arraybackslash $50 \times 50$   \\
-      \arraybackslash $70 \times 70$   \\
       \arraybackslash $100 \times 100$ \\
-      \arraybackslash $120 \times 80$  \\
       \arraybackslash $150 \times 150$ \\
       \arraybackslash $200 \times 200$ \\
       \bottomrule
@@ -74,25 +72,22 @@ These solvers represent and solve the problem in different ways.
 \texttt{highs} uses a linear programming representation. Each run is executed
 with a timeout of 300 seconds.
 The benchmark considers three gripper sizes, $S \in \{1,2,3\}\cdot \texttt{boxes\_x\_dim},$
-allowing us to compare how the gripper size affects grouping and
-scheduling performance.
+allowing us to compare how the gripper size affects chunking and
+releasing performance.
 
 \subsection{Scaling by gripper size}
-The first comparison fixes the gripper multiplier and measures how the
+The first comparison fixes the gripper multiplier and measures how the 
 solve time changes with the total number of boxes. Figure~\ref{fig:scaling-per-grip}
 shows the resulting scaling curves for $k=1$, $k=2$, and $k=3$.
 This analysis captures the effect of the gripper size on the proposed model.
-Larger grippers reduce the number of groups that must be scheduled:
-the average number of groups decreases from about $75$ for $k=1$
-to about $40$ for $k=3$. Therefore, the solve time generally
-decreases as the multiplier increases.
+Larger grippers reduce the number of chunks that must be scheduled.
+Therefore, the solve time generally decreases as the multiplier increases.
 
-In particular, \texttt{gecode} remains in the lowest runtime range and
-shows the best scaling behaviour. \texttt{cp-sat} shows a clearer
-dependence on the number of boxes, but remains well below the timeout.
-\texttt{chuffed} is usually fast, although it times out on the densest
-instance for $k=1$. \texttt{highs} is consistently the slowest solver.
-
+In particular, \texttt{gecode} and \texttt{chuffed} remain in the lowest
+runtime range and show the best scaling behaviour. \texttt{cp-sat} shows
+a clearer dependence on the number of boxes, but remains well below the
+timeout. \texttt{highs} is consistently the slowest solver and reaches the
+timeout range on the larger instances.
 \subsection{Overall solver behaviour}
 
 After separating the gripper sizes, we aggregate all benchmark runs into a
@@ -102,12 +97,12 @@ instances. This view highlights the global trend across the benchmark and makes
 the relative behaviour of the solvers easier to compare.
 
 Overall, the comparison confirms that the propagation-based solvers are the most
-suitable for this model. \texttt{gecode} gives the most stable performance and
-remains close to the bottom of the plot for almost all instances. \texttt{chuffed}
-is also competitive, but its performance is less regular. \texttt{cp-sat}
-shows a stronger dependence on the instance size, although it still remains
-far from the timeout in most runs. In contrast, \texttt{highs}
-performs worst and several runs approach or reach the timeout.
+suitable for this model. \texttt{gecode} and \texttt{chuffed} remain close to
+the bottom of the plot for most instances, with \texttt{gecode} showing slightly
+more regular behaviour. \texttt{chuffed} is also competitive, but its performance
+is less regular. \texttt{cp-sat} shows a stronger dependence on the instance
+size, although it still remains far from the timeout in most runs. In contrast,
+\texttt{highs} performs worst and several runs approach or reach the timeout.
 
 \begin{figure}[t]
   \centering
@@ -119,16 +114,17 @@ performs worst and several runs approach or reach the timeout.
 
 \subsection{Per-pallet breakdown}
 Another useful comparison studies how the pallet preset influences solver
-runtime. Differences across presets reflect how \texttt{boxes\_along\_x} and
-\texttt{boxes\_along\_y} determine the number and arrangement of groups.
+runtime. Differences across presets reflect how \texttt{boxes\_per\_row} and
+\texttt{pallet\_rows} determine the number and arrangement of chunks.
 Figure~\ref{fig:scaling-per-pallet} shows the resulting breakdown.
 
 The relative behaviour of the solvers remains mostly unchanged across pallets:
-\texttt{gecode} stays the most stable, \texttt{cp-sat} and \texttt{chuffed}
-remain competitive, and \texttt{highs} is usually the slowest. Larger presets,
-especially the Industrie, US, and Australian pallets, make the separation between
-solvers more visible because they include denser instances. The half-pallet
-instances are smaller, so the differences are less pronounced.
+\texttt{gecode} and \texttt{chuffed} stay close to the bottom of the plots,
+\texttt{cp-sat} is slower but remains well below \texttt{highs}, and
+\texttt{highs} is usually the slowest. Larger presets, especially the Industrie,
+US, and Australian pallets, make the separation between solvers more visible
+because they include denser instances. The half-pallet instances are smaller,
+so the differences are less pronounced.
 
 \begin{figure}[t]
   \centering
@@ -163,4 +159,40 @@ instances are smaller, so the differences are less pronounced.
   logarithmic scale.}
   \label{fig:scaling-per-pallet}
 
+\end{figure}
+
+
+
+\subsection{Flattening and execution overhead}
+
+The last analysis compares the solver-reported time with the total runtime
+measured by the Python benchmark script. This comparison estimates the cost of
+the steps that occur before the actual solver search. The main one is
+MiniZinc flattening: in this phase, the high-level MiniZinc model and the
+instance data are translated into a lower-level FlatZinc representation, which
+is then passed to the selected backend solver. The remaining overhead includes
+Python instance construction, MiniZinc invocation, and process startup.
+
+Figure~\ref{fig:wall-vs-solve} shows the resulting comparison. The diagonal line
+marks equal total runtime and solver-reported time. Points close to the diagonal
+correspond to runs where most of the time is spent inside the solver. Points
+above the diagonal instead indicate a larger overhead outside the solver; in
+these cases, flattening and execution costs are more relevant relative to the
+actual solving time.
+
+The plot shows that this effect is strongest for the fastest runs, especially
+for \texttt{gecode} and several \texttt{chuffed} executions. Their
+solver-reported time is very small, so even a modest overhead produces a
+visible separation from the diagonal. For slower runs, especially
+\texttt{highs} and the larger \texttt{cp-sat} instances, the points are closer
+to the diagonal. In those cases, the solving phase dominates the total runtime,
+and the relative overhead becomes less important.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.75\linewidth]{figures/wall_vs_solve.pdf}
+  \caption{Execution time compared with solver-reported solve time. The diagonal
+  marks equal values; points above it indicate additional overhead before or
+  around the solver call. Both axes use a logarithmic scale.}
+  \label{fig:wall-vs-solve}
 \end{figure}

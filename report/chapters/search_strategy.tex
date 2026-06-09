@@ -1,38 +1,32 @@
 \section{Search Strategy}
 \label{sec:search}
 
-\subsection{Default search}
+The model adopts a constructive search strategy that exploits a structural
+property of the problem: the pallet can be filled row by row, top to
+bottom, and within each row left to right, taking the longest pick the
+gripper allows at each step. Under this plan, the row above each new chunk
+is already full when it is placed, so the collision rule naturally forces
+the plate to open downward into the still-empty rows below, where no
+collision is possible. The plan is feasible by construction, and a search
+that follows this order finds a solution with essentially no backtracking.
 
-The initial model relies on MiniZinc's default search:
+For each chunk the search must fix four values together: the pallet row
+\texttt{y\_row[i]}, the length \texttt{chunk\_len[i]}, the starting column
+\texttt{x\_start[i]}, and the plate direction \texttt{plate[i]}. The
+desired values are, respectively, the smallest available row, the longest
+pick possible, the leftmost column, and the downward plate.
 
-\vspace{0.5cm}
-\begin{lstlisting}
-solve satisfy;
-\end{lstlisting}
-\vspace{0.5cm}
-
-With no annotation, the solver applies a generic variable- and
-value-selection heuristic over all decision variables in the
-model. Given that \texttt{chunk\_len}, \texttt{chunk\_start},
-\texttt{y\_row}, \texttt{x\_start}, and \texttt{plate} are tightly coupled
-through the geometric and collision constraints, the resulting search
-tree quickly becomes large.
-
-The refined model exploits a property of the problem: the chunks can be
-placed row by row, bottom to top, each one as long as the gripper allows
-and aligned to the left of the still-empty portion of its row. Under this
-plan, the row above each new chunk is already full, so the collision rule
-forces the plate to open downward into the still-empty rows below, where
-no collision is possible. The plan is therefore feasible by construction,
-and a search strategy that visits the decision variables in this order
-finds a solution with essentially no backtracking.
-
-The search must interleave four decisions per chunk
-(\texttt{y\_row[g]}, \texttt{chunk\_len[g]}, \texttt{x\_start[g]},
-\texttt{plate[g]}), but a single \texttt{int\_search} annotation visits
-one array in index order and applies a single value-selection rule. To
-combine the four decisions, the model channels them into a single
-\texttt{branch} array, laid out in blocks of four per chunk:
+This intent cannot be expressed directly. The \texttt{int\_search}
+annotation visits a single array in index order and applies a single
+value-selection rule, whereas the strategy above needs four arrays at once
+and mixed extrema: \texttt{indomain\_min} on row and column, but
+\texttt{indomain\_max} on length and plate. The model works around both
+limitations with a single construction: it channels the four decisions of
+each chunk into one \texttt{branch} array, laid out in blocks of four, and
+applies a uniform \texttt{indomain\_min} to the whole array. For the
+variables on which a maximum is wanted, the entry stored in
+\texttt{branch} is the \emph{complement}, so that minimizing the entry
+yields the maximum of the original variable.
 
 \vspace{0.5cm}
 \begin{lstlisting}
@@ -40,11 +34,11 @@ par int: branch_ub = max([boxes_along_y, boxes_along_x, max_pkble_boxes]);
 
 array[1..4*n_chunks] of var 0..branch_ub: branch;
 
-constraint forall(n in 1..n_chunks)(
-  branch[4*n-3] = y_row[n]                       /\
-  branch[4*n-2] = max_pkble_boxes - chunk_len[n] /\
-  branch[4*n-1] = x_start[n]                     /\
-  branch[4*n]   = 1 - plate[n]
+constraint forall(i in 1..n_chunks)(
+  branch[4*i-3] = y_row[i]                       /\
+  branch[4*i-2] = max_pkble_boxes - chunk_len[i] /\
+  branch[4*i-1] = x_start[i]                     /\
+  branch[4*i]   = 1 - plate[i]
 );
 
 solve :: int_search(branch, input_order, indomain_min)
@@ -52,31 +46,82 @@ solve :: int_search(branch, input_order, indomain_min)
 \end{lstlisting}
 \vspace{0.5cm}
 
-The four entries per chunk are ordered to reflect the constructive plan:
-row, length, column, plate. Since \texttt{indomain\_min} always selects
-the smallest available value, two of the four decisions are channelled in
-complemented form so that the same rule produces the desired extremum.
-The entry \texttt{max\_pkble\_boxes - chunk\_len[g]} is minimised when
-\texttt{chunk\_len[g]} is maximised, yielding the longest pick the
-gripper allows; the entry \texttt{1 - plate[g]} is minimised when
-\texttt{plate[g] = 1}, selecting the downward plate. The two
-non-complemented entries directly produce the smallest row and the
-leftmost column.
+The branch array is laid out so that entries \(4i-3\), \(4i-2\),
+\(4i-1\), \(4i\) correspond to the row, length, column, and plate of
+chunk \(i\). Visiting the array in \texttt{input\_order} therefore
+processes all four decisions of chunk \(1\) before moving to chunk
+\(2\), and so on.
 
-The variable \texttt{chunk\_start} does not appear in the \texttt{branch}
-array. The prefix-sum constraints introduced in
-Section~\ref{sec:model} make it a deterministic function of the chunk
-lengths, so the search can leave it to propagation alone and avoid
-exploring redundant assignments of belt positions.
+For row and column, the entries store \texttt{y\_row[i]} and
+\texttt{x\_start[i]} directly, so \texttt{indomain\_min} selects the
+smallest available values: the topmost row and the leftmost column. For
+length and plate the desired behavior is the opposite: the search should
+prefer the longest pick and the downward plate. Since \texttt{indomain\_min}
+always minimizes, these two entries store the \emph{complement} of the
+original variable. The entry \texttt{max\_pkble\_boxes - chunk\_len[i]}
+reaches its minimum of \(0\) when \texttt{chunk\_len[i] = max\_pkble\_boxes};
+the entry \texttt{1 - plate[i]} reaches its minimum of \(0\) when
+\texttt{plate[i] = 1}.
 
-An example of the result of the chunking phase is shown in
-Figure~\ref{fig:sample-pallet}.
-\begin{figure}[t!]
+Figure~\ref{fig:sample-schedule} shows an example output of the proposed model.
+
+\begin{figure}[h]
   \centering
-  \includegraphics[width=0.65\linewidth]{figures/pallet.pdf}
-  \caption{Example pallet layout generated for $70 \times 70$ boxes on an
-  $800 \times 1200$ pallet. The resulting $11 \times 17$ grid contains
-  $187$ boxes. The grip size is set to three box widths.
-  Chunks alternate $3$/$4$/$4$ across each row.}
-  \label{fig:sample-pallet}
+
+  \begin{subfigure}[t]{0.33\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/schedule/schedule_step_01.pdf}
+    \caption{Step 1}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.33\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/schedule/schedule_step_03.pdf}
+    \caption{Step 3}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.33\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/schedule/schedule_step_05.pdf}
+    \caption{Step 5}
+  \end{subfigure}
+
+  \vspace{0.3cm}
+
+  \begin{subfigure}[t]{0.33\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/schedule/schedule_step_07.pdf}
+    \caption{Step 7}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.33\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/schedule/schedule_step_09.pdf}
+    \caption{Step 9}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.33\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/schedule/schedule_step_11.pdf}
+    \caption{Step 11}
+  \end{subfigure}
+
+  \vspace{0.3cm}
+
+  \begin{subfigure}[t]{0.33\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/schedule/schedule_step_13.pdf}
+    \caption{Step 13}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.33\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/schedule/schedule_step_14.pdf}
+    \caption{Step 14}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.33\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/schedule/schedule_step_15.pdf}
+    \caption{Step 15}
+  \end{subfigure}
+
+  \caption{Example of a feasible sequence. The red border marks the
+  chunk being placed at the selected step, while the blue arrow indicates the
+  opening side of the plate.}
+  \label{fig:sample-schedule}
 \end{figure}

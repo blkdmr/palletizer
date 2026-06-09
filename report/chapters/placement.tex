@@ -8,8 +8,8 @@ starts. This is represented by two decision variables:
 
 \vspace{0.5cm}
 \begin{lstlisting}
-array[1..n_chunks] of var 1..boxes_per_row: x_start;
 array[1..n_chunks] of var 1..pallet_rows: y_row;
+array[1..n_chunks] of var 1..boxes_per_row: x_start;
 \end{lstlisting}
 \vspace{0.5cm}
 
@@ -30,27 +30,18 @@ constraint forall(n in 1..n_chunks)(
 \end{lstlisting}
 \vspace{0.5cm}
 
-The second requirement is that two chunks must not occupy the same pallet cells.
-Each chunk can be seen as a horizontal rectangle of height \(1\): it starts at
-\((\texttt{x\_start[n]}, \texttt{y\_row[n]})\), has width
-\texttt{chunk\_len[n]}, and has height \(1\). Therefore, the non-overlap
-condition can be expressed directly by using 
-\begin{lstlisting}
-constraint forall(i, j in 1..n_chunks where i < j)(
-  y_row[i] != y_row[j]                              \/
-  x_start[i] + chunk_len[i] <= x_start[j]          \/
-  x_start[j] + chunk_len[j] <= x_start[i]
-);
-\end{lstlisting}
-\vspace{0.5cm}
-
-or with the global constraint \texttt{diffn}:
+The second requirement is that no two chunks may occupy the same pallet
+cell. Geometrically, each chunk \(g\) can be seen as an axis-aligned
+rectangle of height \(1\): its origin is \((\texttt{x\_start[g]},
+\texttt{y\_row[g]})\) and its width is \texttt{chunk\_len[g]}. The global
+constraint \texttt{diffn(x, y, dx, dy)} enforces non-overlap for a
+collection of such rectangles, each described by an origin and dimensions.
+With heights set to \(1\) for every chunk, it expresses the condition
+directly:
 
 \vspace{0.5cm}
 \begin{lstlisting}
-include "globals.mzn";   % for diffn
-
-constraint diffn(x_start, y_row, chunk_len, [1 | n in 1..n_chunks]);
+constraint diffn(x_start, y_row, chunk_len, [1 | g in 1..n_chunks]);
 \end{lstlisting}
 \vspace{0.5cm}
 
@@ -90,64 +81,3 @@ in \texttt{y\_row}. As a result, the solver knows from the beginning how many
 chunks must be assigned to each row. Once a row has received the required number
 of chunks, no further chunks can be placed there, which reduces unnecessary
 branching during search.
-
-\section{Release and Plate Collision}
-\label{sec:release}
-
-When a chunk is released, the gripper opens one of its two plates. The
-opening side sweeps the adjacent pallet row: if that row already contains a
-box overlapping the chunk along \(x\), the plate collides with it. A binary
-variable encodes the opening side, with \(0\) meaning the plate opens
-upward (toward row \(r-1\)) and \(1\) downward (toward row \(r+1\)):
-
-\vspace{0.5cm}
-\begin{lstlisting}
-array[1..n_chunks] of var 0..1: plate;
-\end{lstlisting}
-
-First, it introduces an
-auxiliary variable that materialises the target row of each plate:
-
-\vspace{0.5cm}
-\begin{lstlisting}
-array[1..n_chunks] of var 0..boxes_along_y+1: target;
-constraint forall(n in 1..n_chunks)(
-  target[n] = y_row[n] - 1 + 2*plate[n]
-);
-\end{lstlisting}
-\vspace{0.5cm}
-
-When \texttt{plate[n] = 0} the expression yields \texttt{y\_row[n] - 1};
-when \texttt{plate[n] = 1} it yields \texttt{y\_row[n] + 1}. The two
-opening directions collapse into a single arithmetic equality, replacing
-the reified disjunction of the initial formulation. The domain is widened
-to \([0, \texttt{boxes\_along\_y}+1]\) so that the boundary values \(0\)
-and \(\texttt{boxes\_along\_y}+1\) explicitly represent "off the pallet";
-they never match a real row index and so they encode a free edge without
-any special case.
-
-Second, the temporal precedence is built directly into the quantifier
-range. Because the position of a chunk in the belt stream coincides with
-its release index, only pairs with \(pred_chunk < current_chunk\) describe a potential
-collision (\(pred\_chunk\) is already on the pallet when \(current\_chunk\) is released). The
-range \texttt{pred\_chunk in 1..current\_chunk-1} is a compile-time parameter, so the solver
-generates only the relevant pairs:
-
-\vspace{0.5cm}
-\begin{lstlisting}
-constraint forall(current_chunk in 2..n_chunks, pred_chunk in 1..current_chunk-1)(
-  not(
-       y_row[pred_chunk] = target[current_chunk]
-    /\ x_start[pred_chunk] < x_start[current_chunk]  + chunk_len[current_chunk]
-    /\ x_start[current_chunk]  < x_start[pred_chunk] + chunk_len[pred_chunk]
-  )
-);
-\end{lstlisting}
-\vspace{0.5cm}
-
-The body becomes a direct negation of a single conjunction: chunk \(pred\_chunk\)
-cannot share the target row of \(current\_chunk\) while overlapping it along \(x\). No
-reification on the plate value (encoded by \texttt{target}), no
-reification on the temporal ordering (encoded by the quantifier range).
-A single propagator per pair, where the previous formulation needed
-several.  

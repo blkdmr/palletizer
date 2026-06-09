@@ -1,0 +1,56 @@
+\section{Plate Collision}
+\label{sec:release}
+
+When a chunk is released, the gripper opens one of its two plates. The
+opening side sweeps the adjacent pallet row: if that row already contains
+a box overlapping the chunk along \(x\), the plate collides with it. A
+binary variable encodes the opening side, with \(0\) meaning the plate
+opens upward (toward row \(r-1\)) and \(1\) downward (toward row \(r+1\)):
+
+\vspace{0.5cm}
+\begin{lstlisting}
+array[1..n_chunks] of var 0..1: plate;
+\end{lstlisting}
+\vspace{0.5cm}
+
+An auxiliary variable represents the target row swept by each plate:
+
+\vspace{0.5cm}
+\begin{lstlisting}
+array[1..n_chunks] of var 0..boxes_along_y+1: target;
+constraint forall(g in 1..n_chunks)(
+  target[g] = y_row[g] - 1 + 2*plate[g]
+);
+\end{lstlisting}
+\vspace{0.5cm}
+
+When \texttt{plate[g] = 0} the expression yields \texttt{y\_row[g] - 1};
+when \texttt{plate[g] = 1} it yields \texttt{y\_row[g] + 1}. The domain
+is widened to \([0,\ \texttt{boxes\_along\_y}+1]\) so that the boundary
+values \(0\) and \(\texttt{boxes\_along\_y}+1\) represent ``off the
+pallet'': they never match a real row index and therefore encode a free
+edge without any special case.
+
+The no-collision rule then follows. Because release order coincides with
+belt order, \texttt{pred\_chunk} is already on the pallet whenever
+\texttt{pred\_chunk} $<$ \texttt{current\_chunk}. The range
+\texttt{pred\_chunk in 1..current\_chunk-1} is a compile-time parameter,
+so the solver generates only the relevant pairs:
+
+\vspace{0.5cm}
+\begin{lstlisting}
+constraint forall(curr_chunk in 2..n_chunks,
+                  pred_chunk in 1..curr_chunk-1)
+(
+  not(
+       y_row[pred_chunk] = target[curr_chunk]
+    /\ x_start[pred_chunk] < x_start[curr_chunk] + chunk_len[curr_chunk]
+    /\ x_start[curr_chunk] < x_start[pred_chunk] + chunk_len[pred_chunk]
+  )
+);
+\end{lstlisting}
+\vspace{0.5cm}
+
+The body is a direct negation of a single conjunction:
+\texttt{pred\_chunk} cannot share the target row of
+\texttt{curr\_chunk} while overlapping it along \(x\).
