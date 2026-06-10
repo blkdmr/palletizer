@@ -7,15 +7,13 @@ par int: pallet_rows;
 par int: boxes_x_dim;
 par int: grip_size;
 
-par int: max_pkble_boxes = (grip_size + boxes_x_dim) div boxes_x_dim; % max boxes in one pick
-
-par int: chunks_per_row = (boxes_per_row + max_pkble_boxes - 1) div max_pkble_boxes; % picks per row
+par int: max_pkble_boxes = (grip_size + boxes_x_dim) div boxes_x_dim;
+par int: chunks_per_row = (boxes_per_row + max_pkble_boxes - 1) div max_pkble_boxes;
 par int: n_chunks       = pallet_rows * chunks_per_row;
 
 %% ==== chunking ====
 array[1..n_chunks] of var 1..n_boxes: chunk_start;
 array[1..n_chunks] of var 1..max_pkble_boxes: chunk_len;
-
 
 constraint chunk_start[1] = 1;
 
@@ -47,11 +45,11 @@ constraint forall(n in 1..n_chunks)(
   target[n] = y_row[n] - 1 + 2*plate[n]
 );
 
-constraint forall(current_chunk in 2..n_chunks, pred_chunk in 1..current_chunk-1)(
+constraint forall(curr_chunk in 2..n_chunks, pred_chunk in 1..curr_chunk-1)(
   not(
-       y_row[pred_chunk] = target[current_chunk]
-    /\ x_start[pred_chunk] < x_start[current_chunk]  + chunk_len[current_chunk]
-    /\ x_start[current_chunk]  < x_start[pred_chunk] + chunk_len[pred_chunk]
+       y_row[pred_chunk] = target[curr_chunk]
+    /\ x_start[pred_chunk] < x_start[curr_chunk]  + chunk_len[curr_chunk]
+    /\ x_start[curr_chunk]  < x_start[pred_chunk] + chunk_len[pred_chunk]
   )
 );
 

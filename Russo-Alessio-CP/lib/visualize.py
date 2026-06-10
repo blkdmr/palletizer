@@ -6,7 +6,6 @@ from matplotlib import cm
 
 
 def _cell_xy(y_row, x_col, cell_w, cell_h):
-    """Pixel coords of the top-left of pallet cell (x_col, y_row). 1-indexed."""
     return (x_col - 1) * cell_w, (y_row - 1) * cell_h
 
 
@@ -20,7 +19,6 @@ def _group_bbox(y_row, x_start, length, cell_w, cell_h):
 
 
 def _draw_boxes(ax, groups, placements, placed_set, current_idx, cell_w, cell_h):
-    """placements[g] = (y_row, x_start) for group g (0-indexed)."""
     for g_idx, group in enumerate(groups):
         y_row, x_start = placements[g_idx]
         for offset, box in enumerate(group):
@@ -43,10 +41,10 @@ def render_pallet(solution, out_path):
     py = solution["pallet_rows"]
     cw = solution["cell_w"]
     ch = solution["cell_h"]
-    groups     = solution["groups"]
+    groups = solution["groups"]
     placements = solution["placements"]
 
-    width_in  = 10
+    width_in = 10
     height_in = max(3.0, width_in * (py * ch) / (px * cw))
     fig, ax = plt.subplots(figsize=(width_in, height_in))
 
@@ -60,7 +58,7 @@ def render_pallet(solution, out_path):
         ax.add_patch(patches.Rectangle(
             (x0, y0), w, h, linewidth=2.0, edgecolor="black", facecolor="none"
         ))
-        ax.text(x0 + w/2, y0 + h/2, f"G{g_idx + 1}",
+        ax.text(x0 + w/2, y0 + h/2, f"C{g_idx + 1}",
                 ha="center", va="center", fontsize=11, fontweight="bold")
         for offset, box in enumerate(group):
             x, y = _cell_xy(y_row, x_start + offset, cw, ch)
@@ -83,9 +81,9 @@ def render_schedule(solution, out_path):
     py = solution["pallet_rows"]
     cw = solution["cell_w"]
     ch = solution["cell_h"]
-    groups     = solution["groups"]
+    groups = solution["groups"]
     placements = solution["placements"]
-    schedule   = solution["schedule"]
+    schedule = solution["schedule"]
 
     cell_aspect = (py * ch) / (px * cw)
     sub_w = 6.0

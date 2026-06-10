@@ -18,11 +18,11 @@ mpl.rcParams.update({
 })
 
 
-ROOT_DIR = Path("benchmark") 
+ROOT_DIR = Path("benchmark")
 INPUT_FILE = ROOT_DIR / "results.json"
-OUTPUT_DIR = ROOT_DIR / Path("plots") 
+OUTPUT_DIR = ROOT_DIR / "plots"
 
-TIME_FLOOR  = 1e-4 
+TIME_FLOOR = 1e-4
 
 X_AXIS = "n_boxes"
 
@@ -40,18 +40,18 @@ def load_results(path):
         if t is None:
             continue
         rows.append({
-            "solver":         r["solver"],
-            "pallet":         r["pallet_preset"],
-            "box":           f"{r['box_x']}x{r['box_y']}",
-            "n_boxes":        r["n_boxes"],
-            "n_chunks":       r["n_chunks"],
-            "box_x":          r["box_x"],
-            "box_y":          r["box_y"],
-            "grip_size":      r["grip_size"],
-            "grip_mult":      r.get("grip_multiplier", 3),
-            "time":           max(t, TIME_FLOOR),
-            "wall":           r["wall_time"],
-            "status":         r["status"],
+            "solver": r["solver"],
+            "pallet": r["pallet_preset"],
+            "box": f"{r['box_x']}x{r['box_y']}",
+            "n_boxes": r["n_boxes"],
+            "n_chunks": r["n_chunks"],
+            "box_x": r["box_x"],
+            "box_y": r["box_y"],
+            "grip_size": r["grip_size"],
+            "grip_mult": r.get("grip_multiplier", 3),
+            "time": max(t, TIME_FLOOR),
+            "wall": r["wall_time"],
+            "status": r["status"],
         })
     return data, rows
 
@@ -62,7 +62,7 @@ def solver_color_map(solvers):
 
 
 def plot_scaling_overall(rows, colors, out_path, x_axis):
-    """Solve time vs <x_axis>, one line per solver."""
+    """Solve time vs x_axis, one line per solver."""
     by_solver = defaultdict(list)
     for r in rows:
         by_solver[r["solver"]].append((r[x_axis], r["time"]))
@@ -85,7 +85,7 @@ def plot_scaling_overall(rows, colors, out_path, x_axis):
 
 
 def plot_scaling_per_pallet(rows, colors, out_dir, x_axis):
-    """One file per pallet preset: solve_time vs <x_axis>, lines per solver."""
+    """One file per pallet preset: solve time vs x_axis, lines per solver."""
     pallets = sorted({r["pallet"] for r in rows})
     written = []
     for pallet in pallets:
@@ -113,41 +113,8 @@ def plot_scaling_per_pallet(rows, colors, out_dir, x_axis):
     return written
 
 
-def plot_solver_summary(rows, colors, out_path):
-    """Bar chart: mean solve_time per solver, with std-deviation whiskers (log y)."""
-    by_solver = defaultdict(list)
-    for r in rows:
-        by_solver[r["solver"]].append(r["time"])
-
-    solvers = sorted(by_solver.keys())
-    means = []
-    stds = []
-    for s in solvers:
-        ts = by_solver[s]
-        m = sum(ts) / len(ts)
-        var = sum((t - m) ** 2 for t in ts) / len(ts)
-        means.append(m)
-        stds.append(var ** 0.5)
-
-    fig, ax = plt.subplots(figsize=(8, 5))
-    xs = list(range(len(solvers)))
-    bar_colors = [colors[s] for s in solvers]
-    # Clip the lower whisker to TIME_FLOOR so log scale stays well-defined.
-    lo_err = [min(s, max(m - TIME_FLOOR, 0)) for m, s in zip(means, stds)]
-    hi_err = stds
-    ax.bar(xs, means, color=bar_colors, alpha=0.8,
-           yerr=[lo_err, hi_err], capsize=4, ecolor="black")
-    ax.set_yscale("log")
-    ax.set_xticks(xs)
-    ax.set_xticklabels(solvers, rotation=30, ha="right")
-    ax.set_ylabel("solve time (s)")
-    plt.tight_layout()
-    plt.savefig(out_path, format="pdf", dpi=600)
-    plt.close(fig)
-
-
 def plot_scaling_by_grip(rows, colors, out_path):
-    """Mean solve_time vs grip multiplier, one line per solver."""
+    """Mean solve time vs grip multiplier, one line per solver."""
     by_solver_grip = defaultdict(list)
     for r in rows:
         by_solver_grip[(r["solver"], r["grip_mult"])].append(r["time"])
@@ -175,7 +142,7 @@ def plot_scaling_by_grip(rows, colors, out_path):
 
 
 def plot_scaling_overall_per_grip(rows, colors, out_dir, x_axis):
-    """One file per grip multiplier: solve_time vs <x_axis>, lines per solver."""
+    """One file per grip multiplier: solve time vs x_axis, lines per solver."""
     grips = sorted({r["grip_mult"] for r in rows})
     written = []
     for g in grips:
@@ -205,7 +172,7 @@ def plot_scaling_overall_per_grip(rows, colors, out_dir, x_axis):
 
 
 def plot_wall_vs_solve(rows, colors, out_path):
-    """Scatter wall_time vs solve_time per solver — shows MiniZinc/flattening overhead."""
+    """Scatter wall time vs solve time per solver."""
     fig, ax = plt.subplots(figsize=(8, 6))
     by_solver = defaultdict(list)
     for r in rows:
@@ -214,7 +181,8 @@ def plot_wall_vs_solve(rows, colors, out_path):
     for solver, pts in sorted(by_solver.items()):
         xs = [p[0] for p in pts]
         ys = [p[1] for p in pts]
-        ax.scatter(xs, ys, label=solver, color=colors[solver], s=30, alpha=0.75, edgecolor="black", linewidth=0.3)
+        ax.scatter(xs, ys, label=solver, color=colors[solver],
+                   s=30, alpha=0.75, edgecolor="black", linewidth=0.3)
 
     lim_lo = TIME_FLOOR
     lim_hi = max(max(r["wall"] for r in rows), max(r["time"] for r in rows)) * 1.05
@@ -232,7 +200,6 @@ def plot_wall_vs_solve(rows, colors, out_path):
 
 
 def main():
-    
     data, rows = load_results(INPUT_FILE)
     if not rows:
         print("No usable rows in benchmark_results.json")
@@ -240,7 +207,6 @@ def main():
 
     OUTPUT_DIR.mkdir(exist_ok=True)
     solvers = {r["solver"] for r in rows}
-    
     colors = solver_color_map(solvers)
 
     skipped = sum(1 for r in data["results"] if r["status"] == "ERROR")
@@ -253,7 +219,6 @@ def main():
 
     plot_scaling_overall(rows, colors, OUTPUT_DIR / f"scaling_overall_{X_AXIS}.pdf", X_AXIS)
     per_pallet = plot_scaling_per_pallet(rows, colors, OUTPUT_DIR, X_AXIS)
-    plot_solver_summary(rows, colors, OUTPUT_DIR / "solver_summary.pdf")
     plot_wall_vs_solve(rows, colors, OUTPUT_DIR / "wall_vs_solve.pdf")
     plot_scaling_by_grip(rows, colors, OUTPUT_DIR / "scaling_by_grip.pdf")
     per_grip = plot_scaling_overall_per_grip(rows, colors, OUTPUT_DIR, X_AXIS)

@@ -3,6 +3,7 @@ __pycache__
 *.MD
 *.pdf
 report.*
+*.zip
 
 !README.md
 !report.tex

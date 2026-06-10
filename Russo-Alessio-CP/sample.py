@@ -15,7 +15,9 @@ mpl.rcParams.update({
     "ps.fonttype": 42,
 })
 
+
 def solve_instance(box_x, box_y, pallet_x, pallet_y, solver_name="gecode"):
+    """Solve the pallet-loading problem and return the full solution dict."""
     pallet_info = gen_pallet_info(box_x, box_y, pallet_x, pallet_y)
     boxes_x_dim = box_x if not pallet_info["rotated"] else box_y
     grip_size = 3 * boxes_x_dim
@@ -45,8 +47,6 @@ def solve_instance(box_x, box_y, pallet_x, pallet_y, solver_name="gecode"):
     groups = [list(range(s, s + l)) for s, l in zip(chunk_start, chunk_len)]
     placements = list(zip(y_row_vals, x_start_vals))
 
-    # The belt is FIFO: pick g is released at step g, so the schedule order is
-    # the chunk index itself.
     schedule = [
         {
             "step": g + 1,
@@ -75,23 +75,26 @@ def solve_instance(box_x, box_y, pallet_x, pallet_y, solver_name="gecode"):
         "n_boxes": pallet_info["n_boxes"],
     }
 
+
 def main():
+    """Run the solver and export pallet and schedule renders."""
     box_x, box_y = 70, 70
     pallet_x, pallet_y = 800, 400
 
     solution = solve_instance(box_x, box_y, pallet_x, pallet_y, solver_name="gecode")
 
-    print(f"Solved")
+    print("Solved")
 
     root_export_dir = Path("sample")
-    schedule_export_dir = root_export_dir / Path("schedule")
+    schedule_export_dir = root_export_dir / "schedule"
     root_export_dir.mkdir(exist_ok=True)
     schedule_export_dir.mkdir(exist_ok=True)
-    
+
     render_pallet(solution, root_export_dir / "pallet.pdf")
     render_schedule(solution, schedule_export_dir / "schedule.pdf")
     print(f"Wrote pallet.pdf ({len(solution['groups'])} groups) and "
           f"schedule.pdf ({len(solution['schedule'])} steps)")
+
 
 if __name__ == "__main__":
     main()
