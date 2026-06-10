@@ -27,7 +27,8 @@
   morekeywords={
     include, par, var, array, of, int, bool, set, constraint,
     forall, exists, sum, alldifferent, solve, satisfy, minimize, maximize,
-    if, then, else, endif, in, div, mod, where, output, predicate, function
+    if, then, else, endif, in, div, mod, where, output, predicate, function,
+    diffn, global_cardinality, int_search, input_order, indomain_min
   },
   sensitive=true,
   morecomment=[l]{\%},
@@ -75,122 +76,130 @@
 
 %------------------------------------------------
 
-\begin{frame}{Model Formulation}
+\begin{frame}{Problem Statement}
     \small
-    The robot movement problem is modeled as a feasibility problem.
-    For each pallet layer, the model follows the order of incoming boxes
-    and decides how each picked chunk is placed on the pallet.
+    Boxes arrive on a belt; a robot picks a consecutive group, places it on the pallet, and repeats.
 
+    \vspace{0.25cm}
     \begin{columns}[T,totalwidth=\textwidth]
-        \begin{column}{0.50\textwidth}
-            \begin{block}{Decision variables}
-                \begin{itemize}
-                    \item which consecutive boxes form each chunk;
-                    \item where each picked chunk is placed;
-                    \item which gripper plate opens at release.
-                \end{itemize}
-            \end{block}
-        \end{column}
+        \begin{column}{0.44\textwidth}
+            \textbf{Given}
+            \begin{itemize}
+                \item $n$ boxes of size $x \times y$, arriving in order
+                \item A pallet grid of $W$ columns $\times$ $R$ rows
+                \item Gripper size $S$
+            \end{itemize}
 
-        \begin{column}{0.46\textwidth}
-            \begin{block}{Constraints}
-                \begin{itemize}
-                    \item chunks have no gaps or overlaps;
-                    \item each box is picked and placed exactly once;
-                    \item each pick fits within the gripper size;
-                    \item each chunk stays within one pallet row;
-                    \item the opening side is free at release.
-                \end{itemize}
-            \end{block}
+            \vspace{0.2cm}
+            \textbf{Decide, for each pick}
+            \begin{itemize}
+                \item how many consecutive boxes to grab
+                \item where on the pallet to drop them
+                \item which plate opens at release
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.52\textwidth}
+            \textbf{Subject to}
+            \begin{itemize}
+                \item picks are contiguous and cover the belt with no gaps
+                \item each pick spans at most $\lfloor(S+x)/x\rfloor$ boxes
+                \item all boxes on the same pick go to the same row
+                \item no two picks land on the same cell
+                \item the opening plate faces only free space at the moment of release
+            \end{itemize}
         \end{column}
     \end{columns}
 
-    \vspace{0.25cm}
-    \begin{alertblock}{Goal}
-        Find any assignment that defines a feasible pick-and-release plan.
-    \end{alertblock}
+    \vspace{0.2cm}
+    \textbf{Goal:} find \emph{any} feasible assignment: no objective to minimize.
 \end{frame}
 
 %------------------------------------------------
 
-\begin{frame}[fragile]{Chunk Model Parameters}
-    \small
-    The model inputs are the pallet grid, expressed as the number of boxes along each dimension,
-    the box size, the number of boxes, and the gripper capacity.
-    From these data, the model derives the maximum number of boxes that can be picked at once
-    and the minimum number of necessary chunks.
-    \vspace{0.15cm}
+\begin{frame}[fragile]{Parameters and Derived Constants}
+    \textbf{Input parameters}
     \begin{lstlisting}
-par int: n_boxes;
-par int: boxes_x_dim;
-par int: boxes_along_x;
-par int: boxes_along_y;
-par int: grip_size;
+par int: n_boxes;       % total number of boxes
+par int: boxes_per_row; % boxes in each pallet row
+par int: pallet_rows;   % number of rows on the pallet
+par int: boxes_x_dim;   % box dimension parallel to the gripper
+par int: grip_size;     % gripper size S
+    \end{lstlisting}
 
+    \vspace{0.3cm}
+    \textbf{Derived constants}
+    \begin{lstlisting}
 par int: max_pkble_boxes =
-(grip_size + boxes_x_dim) div boxes_x_dim;
+  (grip_size + boxes_x_dim) div boxes_x_dim;
 
 par int: chunks_per_row =
-(boxes_along_x + max_pkble_boxes - 1) div max_pkble_boxes;
+  (boxes_per_row + max_pkble_boxes - 1) div max_pkble_boxes;
 
-par int: n_chunks = boxes_along_y * chunks_per_row;
+par int: n_chunks = pallet_rows * chunks_per_row;
     \end{lstlisting}
 \end{frame}
 
 %------------------------------------------------
 
-\begin{frame}{Possible Chunk Representation}
+\begin{frame}{Chunking: Encoding Alternatives}
     \small
-    The chosen representation should be compact, while preserving the fact that a pick is a consecutive interval
-    in the belt order.
+    Several encodings are possible for representing which boxes belong to each chunk.
 
-    \vspace{0.25cm}
-    \begin{tabular}{p{0.26\textwidth} p{0.36\textwidth} p{0.30\textwidth}}
+    \vspace{0.2cm}
+    \begin{tabular}{p{0.24\textwidth} p{0.35\textwidth} p{0.32\textwidth}}
         \toprule
-        \textbf{Encoding} & \textbf{Representation} & \textbf{Limitation} \\
+        \textbf{Encoding} & \textbf{Description} & \textbf{Limitation} \\
         \midrule
-        Enumerated chunks
-        & Store, for each chunk, the list of boxes it contains, using padding for shorter chunks.
-        & Chunk structure is explicit, but many variables and extra constraints are needed. \\
+        Enumerated
+        & Store the list of box ids in each chunk, padded to the maximum length.
+        & Membership is explicit, but many variables and ordering constraints are needed. \\
         \midrule
         Binary assignment
-        & Use one Boolean variable for each pair \((c,i)\), equal to true if box \(i\) is assigned to chunk \(c\).
-        & Membership is explicit, but the encoding is large; contiguity and row consistency require extra constraints. \\
+        & One Boolean variable per (chunk, box) pair.
+        & Very large; contiguity must be enforced with additional constraints. \\
         \midrule
-        Interval encoding
-        & Store only the first box and the length of each chunk.
-        & \textbf{Adopted}: compact, and contiguity is implicit. \\
+        Interval
+        & Store only the \emph{start index} and \emph{length} of each chunk.
+        & \textbf{Adopted}: compact, and contiguity is implicit by construction. \\
         \bottomrule
     \end{tabular}
 \end{frame}
 
-
 %------------------------------------------------
 
-\begin{frame}[fragile]{Chunking Implementation}
-    \vspace{0.10cm}
-    \textbf{Variables:} define the interval associated with each chunk.
+\begin{frame}[fragile]{Chunking: Variables}
+    Each chunk is represented as an interval: a start index and a length.
+
+    \vspace{0.4cm}
     \begin{lstlisting}
-array[1..n_chunks] of var 1..n_boxes: chunk_start;
+array[1..n_chunks] of var 1..n_boxes:         chunk_start;
 array[1..n_chunks] of var 1..max_pkble_boxes: chunk_len;
     \end{lstlisting}
 
-    \vspace{0.10cm}
-    \textbf{Start condition:} the first chunk starts from the first box.
+    \vspace{0.4cm}
+    \small
+    Contiguity is implicit: once start and length are fixed, the boxes in the chunk
+    are uniquely determined: no explicit membership variables needed.
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}[fragile]{Chunking: Constraints}
+    \textbf{Start at box 1}
     \begin{lstlisting}
 constraint chunk_start[1] = 1;
     \end{lstlisting}
 
-    \vspace{0.10cm}
-    \textbf{No gaps or overlaps:} each chunk starts immediately after the previous one.
+    \vspace{0.25cm}
+    \textbf{No gaps or overlaps}
     \begin{lstlisting}
-constraint forall(g in 1..n_chunks - 1)(
-  chunk_start[g + 1] = chunk_start[g] + chunk_len[g]
+constraint forall(n in 1..n_chunks - 1)(
+  chunk_start[n + 1] = chunk_start[n] + chunk_len[n]
 );
     \end{lstlisting}
 
-    \vspace{0.10cm}
-    \textbf{Coverage:} the last chunk must end at the last box.
+    \vspace{0.25cm}
+    \textbf{Full coverage}
     \begin{lstlisting}
 constraint chunk_start[n_chunks] + chunk_len[n_chunks] - 1 = n_boxes;
     \end{lstlisting}
@@ -198,206 +207,192 @@ constraint chunk_start[n_chunks] + chunk_len[n_chunks] - 1 = n_boxes;
 
 %------------------------------------------------
 
-\begin{frame}{Chunking Example}
-    \small
-    \begin{columns}[c,totalwidth=\textwidth]
-        \begin{column}{\textwidth}
-            \centering
-            \includegraphics[width=\linewidth,height=0.72\textheight,keepaspectratio]{pallet.pdf}
-        \end{column}
-    \end{columns}
+\begin{frame}[fragile]{Placement: Variables}
+    Each chunk is assigned a row and a starting column on the pallet.
+
+    \vspace{0.4cm}
+    \begin{lstlisting}
+array[1..n_chunks] of var 1..pallet_rows:   y_row;
+array[1..n_chunks] of var 1..boxes_per_row: x_start;
+    \end{lstlisting}
 \end{frame}
 
 %------------------------------------------------
 
-\begin{frame}[fragile]{Placement Variables}
-    \small
-    Chunks are released in source order (chunk \(g\) is the \(g\)-th pick).
-    The model now decides \emph{where} each chunk lands on the pallet and which plate opens during the drop.
-
-    \vspace{0.10cm}
-    \textbf{Pallet row:} which row each chunk is assigned to.
+\begin{frame}[fragile]{Placement: Constraints}
+    \textbf{Row fit}
     \begin{lstlisting}
-array[1..n_chunks] of var 1..boxes_along_y: y_row;
+constraint forall(n in 1..n_chunks)(
+  x_start[n] + chunk_len[n] - 1 <= boxes_per_row
+);
     \end{lstlisting}
 
-    \vspace{0.10cm}
-    \textbf{Starting column:} where inside the row the chunk begins.
+    \vspace{0.25cm}
+    \textbf{No overlap}
     \begin{lstlisting}
-array[1..n_chunks] of var 1..boxes_along_x: x_start;
+constraint diffn(x_start, y_row, chunk_len, [1 | g in 1..n_chunks]);
     \end{lstlisting}
 
-    \vspace{0.10cm}
-    \textbf{Opening side:} select the plate used to release each chunk.
+    \vspace{0.25cm}
+    \textbf{Exact row coverage}
+    \begin{lstlisting}
+constraint global_cardinality(
+  y_row,
+  [r | r in 1..pallet_rows],
+  [chunks_per_row | r in 1..pallet_rows]
+);
+    \end{lstlisting}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}[fragile]{Plate Variable and Target Row}
+    A binary variable encodes which side opens: $0$ = upward (row $r-1$),\ $1$ = downward (row $r+1$).
+
+    \vspace{0.3cm}
     \begin{lstlisting}
 array[1..n_chunks] of var 0..1: plate;
     \end{lstlisting}
 
-    \vspace{0.10cm}
-    The value \(\texttt{plate[g]}\) determines which neighboring row must be free
-    when chunk \(g\) is released, 0 for the upper neighbor and 1 for the lower neighbor.
-\end{frame}
+    \vspace{0.4cm}
+    An auxiliary variable computes the swept row. Boundary values $0$ and
+    $\texttt{pallet\_rows}+1$ represent a free pallet edge.
 
-%------------------------------------------------
-
-\begin{frame}[fragile]{Placement Constraints}
-    \small
-    Three constraints together force the chunks to tile the pallet exactly:
-    each chunk stays inside its row, two chunks never share a cell, and every row
-    is filled completely.
-
-    \vspace{0.10cm}
-    \textbf{Row fit:} the chunk cannot run past the row's right edge.
+    \vspace{0.3cm}
     \begin{lstlisting}
+array[1..n_chunks] of var 0..pallet_rows+1: target;
 constraint forall(g in 1..n_chunks)(
-  x_start[g] + chunk_len[g] - 1 <= boxes_along_x
-);
-    \end{lstlisting}
-
-    \vspace{0.10cm}
-    \textbf{No overlap:} two chunks in the same row must be column-disjoint.
-    \begin{lstlisting}[basicstyle=\ttfamily\tiny]
-constraint forall(g1, g2 in 1..n_chunks where g1 < g2)(
-  y_row[g1] != y_row[g2] \/
-  x_start[g1] + chunk_len[g1] <= x_start[g2] \/
-  x_start[g2] + chunk_len[g2] <= x_start[g1]
-);
-    \end{lstlisting}
-
-    \vspace{0.10cm}
-    \textbf{Exact row coverage:} each pallet row is filled completely.
-    \begin{lstlisting}[basicstyle=\ttfamily\tiny]
-constraint forall(r in 1..boxes_along_y)(
-  sum(g in 1..n_chunks)(bool2int(y_row[g] = r) * chunk_len[g])
-    = boxes_along_x
+  target[g] = y_row[g] - 1 + 2*plate[g]
 );
     \end{lstlisting}
 \end{frame}
 
 %------------------------------------------------
 
-\begin{frame}[fragile]{Plate Constraint}
-    \small
-    When chunk \(g\) is dropped, the row on the side selected by \(\texttt{plate[g]}\)
-    must still be empty. Because chunks are released in source order, "still empty"
-    means any chunk that overlaps \(g\)'s column footprint in the neighboring row
-    must have a \emph{larger} index.
+\begin{frame}[fragile]{No-Collision Constraint}
+    Chunks are released in belt order, so any earlier chunk is already on the pallet.
+    The constraint forbids an earlier chunk from sitting in the swept row and overlapping along $x$.
 
-    \vspace{0.10cm}
-    \textbf{Plate semantics:}
-    \[
-        \texttt{plate}[g] = 0 \;\Rightarrow\; \text{opens toward } \texttt{y\_row}[g] - 1
-    \]
-    \[
-        \texttt{plate}[g] = 1 \;\Rightarrow\; \text{opens toward } \texttt{y\_row}[g] + 1
-    \]
-
-    \vspace{0.10cm}
-    \textbf{MiniZinc implementation}
-    \begin{lstlisting}[basicstyle=\ttfamily\tiny]
-constraint forall(g, g2 in 1..n_chunks where g != g2)(
-  (
-    ( (plate[g] = 0 /\ y_row[g2] = y_row[g] - 1) \/
-      (plate[g] = 1 /\ y_row[g2] = y_row[g] + 1) )
-    /\
-    x_start[g2] < x_start[g] + chunk_len[g] /\
-    x_start[g2] + chunk_len[g2] > x_start[g]
+    \vspace{0.3cm}
+    \begin{lstlisting}
+constraint forall(curr_chunk in 2..n_chunks,
+                  pred_chunk in 1..curr_chunk-1)(
+  not(
+       y_row[pred_chunk] = target[curr_chunk]
+    /\ x_start[pred_chunk] < x_start[curr_chunk] + chunk_len[curr_chunk]
+    /\ x_start[curr_chunk] < x_start[pred_chunk] + chunk_len[pred_chunk]
   )
-  -> g2 > g
 );
     \end{lstlisting}
 \end{frame}
 
 %------------------------------------------------
 
-\begin{frame}{Scheduling Example}
+\begin{frame}[fragile]{Search Strategy}
+    Fill top-to-bottom, left-to-right, longest pick first.
+    The row above is always full when a new chunk is placed,
+    so the plate always opens safely downward — near-zero backtracking.
+
+    \vspace{0.25cm}
+    The four per-chunk decisions are packed into one \texttt{branch} array.
+    Variables where we want the \emph{maximum} are stored as their complement,
+    so a single \texttt{indomain\_min} covers all four.
+
+    \vspace{0.2cm}
+    \begin{lstlisting}
+par int: branch_ub = max([pallet_rows, boxes_per_row, max_pkble_boxes]);
+array[1..4*n_chunks] of var 0..branch_ub: branch;
+
+constraint forall(i in 1..n_chunks)(
+  branch[4*i-3] = y_row[i]                        /\  % min -> topmost row
+  branch[4*i-2] = max_pkble_boxes - chunk_len[i]  /\  % min -> longest pick
+  branch[4*i-1] = x_start[i]                      /\  % min -> leftmost column
+  branch[4*i]   = 1 - plate[i]                        % min -> plate = 1 (down)
+);
+
+solve :: int_search(branch, input_order, indomain_min) satisfy;
+    \end{lstlisting}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Example: Feasible Schedule}
     \centering
     \setlength{\tabcolsep}{2pt}
     \renewcommand{\arraystretch}{0.85}
 
     \begin{tabular}{ccc}
-        \includegraphics[width=0.33\textwidth,height=0.32\textheight,keepaspectratio]{schedule_step_01.pdf} &
-        \includegraphics[width=0.33\textwidth,height=0.32\textheight,keepaspectratio]{schedule_step_04.pdf} &
-        \includegraphics[width=0.33\textwidth,height=0.32\textheight,keepaspectratio]{schedule_step_07.pdf} \\
-        \scriptsize Step 1 & \scriptsize Step 4 & \scriptsize Step 7 \\[-0.05cm]
+        \includegraphics[width=0.30\textwidth,height=0.30\textheight,keepaspectratio]{schedule_step_01.pdf} &
+        \includegraphics[width=0.30\textwidth,height=0.30\textheight,keepaspectratio]{schedule_step_03.pdf} &
+        \includegraphics[width=0.30\textwidth,height=0.30\textheight,keepaspectratio]{schedule_step_05.pdf} \\
+        \scriptsize Step 1 & \scriptsize Step 3 & \scriptsize Step 5 \\[0.05cm]
 
-        \includegraphics[width=0.33\textwidth,height=0.32\textheight,keepaspectratio]{schedule_step_09.pdf} &
-        \includegraphics[width=0.33\textwidth,height=0.32\textheight,keepaspectratio]{schedule_step_10.pdf} &
-        \includegraphics[width=0.33\textwidth,height=0.32\textheight,keepaspectratio]{schedule_step_15.pdf} \\
-        \scriptsize Step 9 & \scriptsize Step 10 & \scriptsize Step 15
+        \includegraphics[width=0.30\textwidth,height=0.30\textheight,keepaspectratio]{schedule_step_07.pdf} &
+        \includegraphics[width=0.30\textwidth,height=0.30\textheight,keepaspectratio]{schedule_step_09.pdf} &
+        \includegraphics[width=0.30\textwidth,height=0.30\textheight,keepaspectratio]{schedule_step_15.pdf} \\
+        \scriptsize Step 7 & \scriptsize Step 9 & \scriptsize Step 15
     \end{tabular}
 
-    \vspace{0.10cm}
+    \vspace{0.1cm}
     \small
-    The red border marks the group being released; the arrow indicates the opening side.
+    The red border marks the chunk being placed; the blue arrow indicates the opening plate direction.
 \end{frame}
 
 %------------------------------------------------
 
-\begin{frame}[fragile]{Solving from Python}
-    \small
-    The model is solved as a feasibility problem.  Python builds each benchmark instance, sends the parameters to MiniZinc, and reads the four decision arrays from the result.
-
-    \vspace{0.15cm}
-    \begin{columns}[T,totalwidth=\textwidth]
-        \begin{column}{0.32\textwidth}
-            \begin{lstlisting}
-solve satisfy;
-            \end{lstlisting}
-
-            \vspace{0.2cm}
-            No objective function is needed: any satisfying assignment is a valid pick-and-release plan.
-        \end{column}
-        \begin{column}{0.63\textwidth}
-            \begin{lstlisting}[language=Python,basicstyle=\ttfamily\tiny]
+\begin{frame}[fragile]{Calling the Model from Python}
+    \begin{lstlisting}[language=Python,basicstyle=\ttfamily\small]
 model    = Model("model.mzn")
-solver   = Solver.lookup("gecode")
+solver   = Solver.lookup(solver_name)
 instance = Instance(solver, model)
 
 instance["n_boxes"]       = pallet_info["n_boxes"]
 instance["boxes_x_dim"]   = boxes_x_dim
-instance["boxes_along_x"] = pallet_info["boxes_along_x"]
-instance["boxes_along_y"] = pallet_info["boxes_along_y"]
+instance["boxes_per_row"] = pallet_info["boxes_per_row"]
+instance["pallet_rows"]   = pallet_info["pallet_rows"]
 instance["grip_size"]     = grip_size
 
 result = instance.solve()
-            \end{lstlisting}
-        \end{column}
-    \end{columns}
+    \end{lstlisting}
 \end{frame}
 
 %------------------------------------------------
 
 \begin{frame}{Benchmark Setup}
     \small
-    The benchmark tests the same model across several pallet geometries, box sizes, gripper sizes, and solver backends.
+    The benchmark tests every (pallet, box size) combination across four solvers and three gripper sizes.
 
-    \vspace{0.25cm}
+    \vspace{0.2cm}
     \begin{columns}[T,totalwidth=\textwidth]
-        \begin{column}{0.48\textwidth}
+        \begin{column}{0.50\textwidth}
             \begin{table}
                 \centering
                 \small
                 \begin{tabular}{lr}
                     \toprule
-                    \textbf{Pallet} & \textbf{Dimensions (mm)} \\
+                    \textbf{Pallet preset} & \textbf{Dimensions (mm)} \\
                     \midrule
-                    Europallet & \(1200 \times 800\) \\
-                    Industrie & \(1200 \times 1000\) \\
-                    US 40\(\times\)48 & \(1219 \times 1016\) \\
-                    Half-pallet & \(800 \times 600\) \\
-                    Australian & \(1165 \times 1165\) \\
+                    Europallet      & $1200 \times 800$  \\
+                    Industrie       & $1200 \times 1000$ \\
+                    US 40$\times$48 & $1219 \times 1016$ \\
+                    Half-pallet     & $800  \times 600$  \\
+                    Australian      & $1165 \times 1165$ \\
                     \bottomrule
                 \end{tabular}
             \end{table}
         \end{column}
-        \begin{column}{0.48\textwidth}
+        \begin{column}{0.46\textwidth}
             \begin{itemize}
-                \item Box sizes: \(50 \times 50\) to \(200 \times 200\) mm.
+                \item Box sizes: $50 \times 50$ to $200 \times 200$ mm.
                 \item Solvers: \texttt{gecode}, \texttt{cp-sat}, \texttt{chuffed}, \texttt{highs}.
-                \item Timeout: \(300\) seconds.
-                \item Gripper sizes: \(S \in \{1,2,3\}\cdot\texttt{boxes\_x\_dim}\).
+                \item Gripper sizes: $S \in \{1,2,3\} \cdot \texttt{boxes\_x\_dim}$.
+                \item Timeout: 300 seconds per run.
             \end{itemize}
+            \vspace{0.1cm}
+            \small
+            \texttt{gecode}/\texttt{chuffed} use CP propagation,
+            \texttt{cp-sat} uses a SAT-based representation,
+            \texttt{highs} uses linear programming.
         \end{column}
     \end{columns}
 \end{frame}
@@ -408,11 +403,14 @@ result = instance.solve()
     \small
     \begin{columns}[T,totalwidth=\textwidth]
         \begin{column}{0.36\textwidth}
-            Larger grippers reduce the number of groups that must be scheduled.
-            In the benchmark, the average number of groups drops from about \(75\) for \(k=1\) to about \(40\) for \(k=3\).
+            Larger grippers reduce the number of chunks that must be scheduled:
+            with $k=3$ there are roughly half as many chunks as with $k=1$.
 
             \vspace{0.25cm}
-            This is reflected in the runtime curves: \texttt{gecode} remains the most stable backend, while \texttt{highs} is consistently slower.
+            This is reflected in the runtime curves. \texttt{gecode} and \texttt{chuffed}
+            stay in the lowest range for all multipliers.
+            \texttt{cp-sat} is slower but remains well below the timeout.
+            \texttt{highs} reaches the timeout on the largest instances.
         \end{column}
         \begin{column}{0.60\textwidth}
             \begin{figure}
@@ -429,12 +427,15 @@ result = instance.solve()
     \small
     \begin{columns}[T,totalwidth=\textwidth]
         \begin{column}{0.40\textwidth}
-            The aggregate plot confirms that propagation-based solvers are the best fit for this model.
-            \texttt{gecode} stays near the lowest runtime range across almost all instances.
+            Aggregating all instances and gripper sizes confirms that
+            CP-oriented solvers are the best fit for this model.
 
-            \vspace{0.25cm}
-            \texttt{chuffed} is competitive but less regular, while \texttt{cp-sat} shows a stronger dependence on instance size.
-            Several \texttt{highs} runs approach or reach timeout.
+            \vspace{0.2cm}
+            \texttt{gecode} is the most stable backend, staying near
+            the bottom of the plot for almost every instance.
+            \texttt{chuffed} is competitive but less regular.
+            \texttt{cp-sat} shows a stronger dependence on instance size.
+            Several \texttt{highs} runs approach or reach the timeout.
         \end{column}
         \begin{column}{0.56\textwidth}
             \begin{figure}
@@ -451,11 +452,16 @@ result = instance.solve()
     \small
     \begin{columns}[T,totalwidth=\textwidth]
         \begin{column}{0.40\textwidth}
-            The total time measured by Python includes more than solver search.
-            MiniZinc must flatten the model into FlatZinc, and the benchmark also pays for instance construction and process startup.
+            The total wall time includes MiniZinc flattening (model $\to$ FlatZinc),
+            Python instance construction, and process startup ---
+            not just solver search time.
 
-            \vspace{0.25cm}
-            This overhead is most visible on very fast runs: when the solver time is tiny, even a small fixed cost separates the point from the diagonal.
+            \vspace{0.2cm}
+            This overhead is most visible on fast runs:
+            when \texttt{gecode} or \texttt{chuffed} solve in milliseconds,
+            even a small fixed cost lifts the point above the diagonal.
+            For slow \texttt{highs} and large \texttt{cp-sat} runs,
+            the solving phase dominates and points stay near the diagonal.
         \end{column}
         \begin{column}{0.56\textwidth}
             \begin{figure}
@@ -464,24 +470,6 @@ result = instance.solve()
             \end{figure}
         \end{column}
     \end{columns}
-\end{frame}
-
-%------------------------------------------------
-
-\begin{frame}{Conclusions}
-    \small
-    \begin{itemize}
-        \item The movement planning problem is naturally split into grouping and release scheduling.
-        \item The interval encoding keeps grouping compact while preserving the geometric structure of the pallet rows.
-        \item Release feasibility can be expressed with local constraints on vertical neighbors and release order.
-        \item The benchmark favors CP-oriented solvers, especially \texttt{gecode}.
-        \item Larger grippers reduce the number of groups and usually improve runtime.
-    \end{itemize}
-
-    \vspace{0.3cm}
-    \begin{block}{Final point}
-        Any satisfying assignment gives a complete pick-and-release plan that places every box once and releases every group toward free space.
-    \end{block}
 \end{frame}
 
 %------------------------------------------------
